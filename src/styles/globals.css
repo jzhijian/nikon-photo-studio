@@ -1,0 +1,175 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ===== Dark Theme (Pure Black) ===== */
+:root, [data-theme="dark"] {
+  --bg-primary: #000000;
+  --bg-secondary: #0a0a0a;
+  --bg-tertiary: #1a1a1a;
+  --bg-hover: #2a2a2a;
+  --bg-card: #111111;
+  --text-primary: #f0f0f0;
+  --text-secondary: rgba(240, 240, 240, 0.55);
+  --accent: #eec059;
+  --accent-hover: #f0d080;
+  --success: #6ee7a8;
+  --danger: #ef6461;
+  --border: rgba(255, 255, 255, 0.1);
+  --shadow: rgba(0, 0, 0, 0.5);
+  --thumb-bg: #1a1a1a;
+  --overlay: rgba(0, 0, 0, 0.7);
+}
+
+/* ===== Light Theme ===== */
+[data-theme="light"] {
+  --bg-primary: #f5f5f5;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #e8e8e8;
+  --bg-hover: #dcdcdc;
+  --bg-card: #ffffff;
+  --text-primary: #1a1a1a;
+  --text-secondary: rgba(26, 26, 26, 0.55);
+  --accent: #c8960a;
+  --accent-hover: #b0850a;
+  --success: #16a34a;
+  --danger: #dc2626;
+  --border: rgba(0, 0, 0, 0.12);
+  --shadow: rgba(0, 0, 0, 0.1);
+  --thumb-bg: #e0e0e0;
+  --overlay: rgba(255, 255, 255, 0.7);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  overflow: hidden;
+  user-select: none;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+#root {
+  height: 100vh;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
+}
+
+/* Thumbnail grid */
+.thumb-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--thumb-size, 160px), 1fr));
+  gap: 8px;
+}
+
+.thumb-item {
+  position: relative;
+  aspect-ratio: 3 / 2;
+  border-radius: 6px;
+  overflow: hidden;
+  cursor: pointer;
+  background: var(--thumb-bg);
+  border: 2px solid transparent;
+  transition: border-color 0.15s ease, transform 0.1s ease;
+  /* Large grids (456+ photos): skip layout & paint of off-screen cards.
+     "auto" remembers each card's rendered size so the scrollbar stays accurate
+     and there is no layout jump as cards scroll into view. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 160px 107px;
+}
+.thumb-item:hover {
+  border-color: var(--accent-hover);
+  transform: scale(1.02);
+}
+.thumb-item.selected {
+  border-color: var(--accent);
+}
+.thumb-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.thumb-item .thumb-label {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 2px 6px;
+  font-size: 10px;
+  color: #fff;
+  background: linear-gradient(transparent, rgba(0,0,0,0.7));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.thumb-item .thumb-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-weight: 600;
+}
+
+/* Filmstrip thumbnails */
+.filmstrip-thumb {
+  width: 56px;
+  height: 56px;
+  border-radius: 4px;
+  overflow: hidden;
+  flex-shrink: 0;
+  cursor: pointer;
+  border: 2px solid transparent;
+  background: var(--thumb-bg);
+  transition: border-color 0.15s ease;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 56px 56px;
+}
+.filmstrip-thumb:hover {
+  border-color: var(--accent-hover);
+}
+.filmstrip-thumb.selected {
+  border-color: var(--accent);
+}
+.filmstrip-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+/* Filmstrip horizontal scrollbar — a touch taller & accented for easy browsing */
+.filmstrip-scroll::-webkit-scrollbar {
+  height: 8px;
+}
+.filmstrip-scroll::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+}
+.filmstrip-scroll::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+.filmstrip-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+}

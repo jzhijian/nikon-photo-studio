@@ -1,0 +1,77 @@
+[package]
+name = "nikon-photo-studio"
+version = "0.1.0"
+edition = "2021"
+description = "Nikon Photo Studio - Desktop photo management and editing tool"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["protocol-asset"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.31", features = ["bundled"] }
+tokio = { version = "1", features = ["full"] }
+image = "0.25"
+quick-xml = "0.36"
+byteorder = "1"
+thiserror = "1"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+rawler = { version = "0.7.2", default-features = false }
+tract-onnx = "0.21"
+
+[dev-dependencies]
+tempfile = "3"
+
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+
+# The full-resolution NEF develop (demosaic + color matrix + resize) is
+# compute-heavy. Keep the rest of the app a fast debug build, but compile the
+# hot numeric crates with optimisations so the center preview decodes in a few
+# seconds instead of tens of seconds in debug builds.
+[profile.dev.package.rawler]
+opt-level = 3
+
+[profile.dev.package.image]
+opt-level = 3
+
+# The JPEG/PNG/TIFF codecs live in separate crates that `image` delegates to;
+# they must be optimised too, or decoding even a tiny preview JPEG still takes
+# ~110ms in debug builds (zune-jpeg is image 0.25's JPEG decoder). Optimising
+# these is the single biggest fix for first-run loading: thumbnails, the center
+# preview and the blur first-pass all decode through here.
+[profile.dev.package.zune-jpeg]
+opt-level = 3
+
+[profile.dev.package.png]
+opt-level = 3
+
+[profile.dev.package.tiff]
+opt-level = 3
+
+[profile.dev.package.flate2]
+opt-level = 3
+
+[profile.dev.package.miniz_oxide]
+opt-level = 3
+
+# ---------------------------------------------------------------------------
+# Release profile: this is the shipped binary. The user explicitly asked for
+# "compiled-language" speed, so we turn on full link-time optimisation and a
+# single codegen unit. This lets LLVM inline and vectorise (AVX2 on Zen3) the
+# hot RAW-develop / resize / JPEG-encode paths across crate boundaries, which a
+# debug build can never do. The result is a several-fold speedup over the debug
+# binary for image decoding, demosaic and encoding.
+# ---------------------------------------------------------------------------
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = true

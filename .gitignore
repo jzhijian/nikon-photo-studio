@@ -1,0 +1,64 @@
+# Node / frontend
+node_modules/
+dist/
+.vite/
+coverage/
+*.tsbuildinfo
+
+# Rust / Tauri build output (including alternate package targets)
+target/
+src-tauri/target/
+src-tauri/target-*/
+src-tauri/**/target/
+src-tauri/gen/
+
+# Packaged applications and large archives
+*.exe
+*.msi
+*.msix
+*.appx
+*.zip
+*.7z
+*.rar
+*.tar
+*.tar.gz
+*.tgz
+*.gz
+
+# Runtime caches and generated user data
+.nikon-photo-studio/
+thumb_cache/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.nps
+
+# Logs / temporary files
+*.log
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+~$*
+
+# Environment and local secrets
+.env
+.env.*
+!.env.example
+
+# IDE / OS
+.idea/
+.vscode/
+.vs/
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Local QA screenshots and reports
+qa-*.png
+qa-*.jpg
+qa-*.json
+qa-*.html
