@@ -637,9 +637,7 @@ function PresetManagerRight() {
 // ---------------- Transfer ----------------
 function TransferRight() {
   const { t } = useTranslation();
-  const connected = useTransferStore((s) => s.connected);
-  const connectionType = useTransferStore((s) => s.connectionType);
-  const [saveDir, setSaveDir] = useState("Pictures/NikonPhotoStudio/2026/07/22/");
+  const { connected, cameraModel, connectionDetail, cameraPhotos, saveDir, setSaveDir } = useTransferStore();
 
   const changeDir = async () => {
     const picked = await open({ directory: true, multiple: false });
@@ -676,13 +674,11 @@ function TransferRight() {
         <div className="flex items-center gap-2 p-2.5 bg-nps-tertiary rounded mb-2">
           <div className="w-2.5 h-2.5 rounded-full bg-nps-success animate-pulse" />
           <div>
-            <div className="text-[13px] font-semibold">Nikon Z30</div>
-            <div className="text-[11px] text-nps-text-dim">{connectionType === "usb" ? "USB (MTP/PTP)" : "192.168.1.1:15740"}</div>
+            <div className="text-[13px] font-semibold">{cameraModel}</div>
+            <div className="text-[11px] text-nps-text-dim">{connectionDetail}</div>
           </div>
         </div>
-        <ExifRow label={t("transfer.battery")} value="78%" />
-        <ExifRow label={t("transfer.storage")} value="128/256 GB" />
-        <ExifRow label={t("transfer.photoCount")} value="48" />
+        <ExifRow label={t("transfer.photoCount")} value={String(cameraPhotos.length)} />
       </div>
       <div className="mb-4">
         <SectionTitle>{t("transfer.downloadQueue")}</SectionTitle>

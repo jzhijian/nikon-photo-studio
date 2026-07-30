@@ -15,9 +15,9 @@ pub struct BlurResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
 pub enum PhotoCategory {
     Portrait,
-    Landscape,
     Other,
 }
 
@@ -25,7 +25,6 @@ impl std::fmt::Display for PhotoCategory {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             PhotoCategory::Portrait => write!(f, "portrait"),
-            PhotoCategory::Landscape => write!(f, "landscape"),
             PhotoCategory::Other => write!(f, "other"),
         }
     }
@@ -71,7 +70,12 @@ mod tests {
     #[test]
     fn test_category_display() {
         assert_eq!(PhotoCategory::Portrait.to_string(), "portrait");
-        assert_eq!(PhotoCategory::Landscape.to_string(), "landscape");
         assert_eq!(PhotoCategory::Other.to_string(), "other");
+    }
+
+    #[test]
+    fn test_category_serializes_for_frontend_filters() {
+        assert_eq!(serde_json::to_string(&PhotoCategory::Portrait).unwrap(), "\"portrait\"");
+        assert_eq!(serde_json::to_string(&PhotoCategory::Other).unwrap(), "\"other\"");
     }
 }

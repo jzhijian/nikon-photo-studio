@@ -200,8 +200,9 @@ interface LibraryState {
   removeMany: (paths: string[]) => void;
   removeSelected: () => void;
   importFromDialog: () => Promise<number>;
-  runBlurDetection: (sensitivity: string, useGpu?: boolean) => Promise<number>;
-  runClassification: () => Promise<number>;
+  runBlurDetection: (sensitivity: string, useGpu?: boolean, paths?: string[]) => Promise<number>;
+  runPortraitDetection: (threshold: number, paths?: string[]) => Promise<number>;
+  applyPortraitThreshold: (threshold: number) => void;
   setAdjust: (params: Partial<AdjustParams>) => void;
   setHsl: (channel: HslChannelName, params: Partial<HslChannel>) => void;
   setGrading: (params: Partial<ColorGrading>) => void;
@@ -328,13 +329,13 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
     } finally { set({ importing: false }); }
   },
 
-  runBlurDetection: async (sensitivity: string, useGpu = false) => {
+  runBlurDetection: async (sensitivity: string, useGpu = false, scopedPaths) => {
     const { photos, detecting } = get();
     if (detecting || photos.length === 0) return 0;
     set({ detecting: true });
     let updated = 0;
     try {
-      const paths = photos.map((p) => p.filePath);
+      const paths = scopedPaths ?? photos.map((p) => p.filePath);
       // Single batched call; Rust decodes + scores all photos in parallel
       // across CPU cores (optionally on the accelerated/GPU fast path).
       const results = await invoke<{ file_path: string; score: number }[]>(
@@ -357,38 +358,50 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
     return updated;
   },
 
-  runClassification: async () => {
+  runPortraitDetection: async (threshold, scopedPaths) => {
     const { photos, detecting } = get();
     if (detecting || photos.length === 0) return 0;
     set({ detecting: true });
     let updated = 0;
     try {
-      const paths = photos.map((p) => p.filePath);
+      const paths = scopedPaths ?? photos.map((p) => p.filePath);
       const results = await invoke<{
         file_path: string;
-        category: "portrait" | "landscape" | "other";
+        category: string;
         confidence: number;
         has_person: boolean;
-      }[]>("batch_classify", { paths, modelDir: "" });
-      const resultMap = new Map(results.map((r) => [r.file_path, r]));
+      }[]>("batch_detect_portraits", { paths, threshold: threshold / 100 });
+      // Be tolerant of older backends that serialized Rust enum variants as
+      // `Portrait`/`Landscape`/`Other`, and normalize Windows path casing and
+      // separators before joining results back to the imported photos.
+      const pathKey = (path: string) => path.replaceAll("/", "\\").toLocaleLowerCase();
+      const resultMap = new Map(results.map((r) => [pathKey(r.file_path), r]));
+      updated = photos.filter((photo) => resultMap.has(pathKey(photo.filePath))).length;
       set((s) => ({
         photos: s.photos.map((ph) => {
-          const result = resultMap.get(ph.filePath);
+          const result = resultMap.get(pathKey(ph.filePath));
           if (!result) return ph;
-          updated++;
           return {
             ...ph,
-            category: result.category,
+            category: result.confidence >= threshold / 100 ? "portrait" : "other",
             classificationConfidence: result.confidence,
             hasPerson: result.has_person,
           };
         }),
       }));
     } catch (error) {
-      console.error("Machine-learning classification failed", error);
+      console.error("Portrait detection failed", error);
     } finally { set({ detecting: false }); }
     return updated;
   },
+
+  applyPortraitThreshold: (threshold) => set((s) => ({
+    photos: s.photos.map((photo) => photo.classificationConfidence < 0 ? photo : {
+      ...photo,
+      category: photo.classificationConfidence >= threshold / 100 ? "portrait" : "other",
+      hasPerson: photo.classificationConfidence >= threshold / 100,
+    }),
+  })),
 
   setAdjust: (params) =>
     set((s) => ({

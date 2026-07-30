@@ -24,9 +24,9 @@ export default function FilmStrip() {
 
   const list = activeModule === "organize"
     ? photos.filter((photo) =>
-        organizeCategory === "blurry"
+        (!folder || photo.folder === folder) && (organizeCategory === "blurry"
           ? photo.blurScore >= 0 && photo.blurScore < organizeThreshold
-          : photo.category === organizeCategory
+          : photo.category === organizeCategory)
       )
     : selectFiltered({ photos, folder, filter, ratingOperator, ratingValue });
 

@@ -8,11 +8,11 @@ import type { AdjustParams, Photo } from "../stores/libraryStore";
  * Hard cap on the processing buffer's long side (px). This matches the RAW
  * backend preview and preserves detail on high-DPI displays / moderate zoom.
  */
-const MAX_BUF = 6144;
+const MAX_BUF = 8192;
 /** Minimum buffer dimension so tiny panels still look decent. */
 const MIN_BUF = 96;
 /** Stable preview sizes keep the disk/memory cache bounded while zooming. */
-const PREVIEW_BUCKETS = [2048, 3072, 4096, 6144] as const;
+const PREVIEW_BUCKETS = [2048, 3072, 4096, 6144, 8192] as const;
 
 function previewBucket(required: number): number {
   return PREVIEW_BUCKETS.find((size) => size >= required) ?? PREVIEW_BUCKETS[PREVIEW_BUCKETS.length - 1];
@@ -71,12 +71,15 @@ export default function ProcessedImage({
   // which case the backend's 8192px safety limit is used.
   const displayLong = Math.max(displaySize.w, displaySize.h, 1);
   const nativeLong = Math.max(photo.width, photo.height);
+  // NEF import dimensions describe the camera's small embedded JPEG, not the
+  // sensor image. Never cap RAW zoom requests to those placeholder dimensions.
+  const isRaw = photo.format.toUpperCase() === "NEF";
   const requiredLong = Math.min(
     MAX_BUF,
     Math.ceil(displayLong * (window.devicePixelRatio || 1) * Math.max(1, zoom) * 1.05)
   );
   const candidatePreviewSize = previewBucket(
-    nativeLong > 0 ? Math.min(requiredLong, nativeLong) : requiredLong
+    !isRaw && nativeLong > 0 ? Math.min(requiredLong, nativeLong) : requiredLong
   );
   // Keep the selected size monotonic for the current photo: shrinking the
   // window or zooming out must not replace a sharp source with a smaller one.

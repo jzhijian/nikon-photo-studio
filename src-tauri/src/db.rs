@@ -64,6 +64,12 @@ impl Database {
             CREATE INDEX IF NOT EXISTS idx_photos_blur ON photos(blur_score);
             CREATE INDEX IF NOT EXISTS idx_photos_deleted ON photos(is_deleted);
             CREATE INDEX IF NOT EXISTS idx_edits_photo ON edits(photo_id);
+
+            CREATE TABLE IF NOT EXISTS app_state (
+                state_key TEXT PRIMARY KEY,
+                value_json TEXT NOT NULL,
+                updated_at TEXT DEFAULT (datetime('now'))
+            );
             ",
         )?;
         Ok(())
@@ -154,6 +160,38 @@ impl Database {
         )?;
         Ok(())
     }
+
+    pub fn save_state(&self, key: &str, value_json: &str) -> SqlResult<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO app_state(state_key,value_json,updated_at) VALUES(?1,?2,datetime('now'))
+             ON CONFLICT(state_key) DO UPDATE SET value_json=excluded.value_json, updated_at=datetime('now')",
+            rusqlite::params![key, value_json],
+        )?;
+        Ok(())
+    }
+
+    pub fn load_state(&self, key: &str) -> SqlResult<Option<String>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT value_json FROM app_state WHERE state_key=?1")?;
+        let mut rows = stmt.query(rusqlite::params![key])?;
+        Ok(rows.next()?.map(|row| row.get(0)).transpose()?)
+    }
+}
+
+#[tauri::command]
+pub fn save_app_state(db: tauri::State<'_, Database>, key: String, value_json: String) -> Result<(), String> {
+    db.save_state(&key, &value_json).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn load_app_state(db: tauri::State<'_, Database>, key: String) -> Result<Option<String>, String> {
+    db.load_state(&key).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn existing_paths(paths: Vec<String>) -> Vec<String> {
+    paths.into_iter().filter(|path| std::path::Path::new(path).is_file()).collect()
 }
 
 #[cfg(test)]

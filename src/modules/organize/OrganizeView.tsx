@@ -16,6 +16,7 @@ import { toast } from "../../stores/toastStore";
 export default function OrganizeView() {
   const { t } = useTranslation();
   const photos = useLibraryStore((s) => s.photos);
+  const folder = useLibraryStore((s) => s.folder);
   const thumbSize = useLibraryStore((s) => s.thumbSize);
   const adjust = useLibraryStore((s) => s.adjust);
   const category = useOrganizeStore((s) => s.category);
@@ -33,9 +34,10 @@ export default function OrganizeView() {
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; photo: Photo } | null>(null);
 
   const list = useMemo(() => photos.filter((photo) => {
+    if (folder && photo.folder !== folder) return false;
     if (category === "blurry") return photo.blurScore >= 0 && photo.blurScore < threshold;
     return photo.category === category;
-  }), [photos, category, threshold]);
+  }), [photos, folder, category, threshold]);
   const orderedPaths = useMemo(() => list.map((photo) => photo.filePath), [list]);
   const selectedCount = photos.filter((photo) => photo.selected).length;
   const developPhoto = developPath ? list.find((photo) => photo.filePath === developPath) ?? null : null;
@@ -163,7 +165,7 @@ export default function OrganizeView() {
   return (
     <div className="h-full flex flex-col">
       <div className="flex items-center gap-3 px-4 py-2.5 border-b border-nps-border shrink-0 flex-wrap">
-        <div className="text-[13px] text-nps-text-dim"><span className="font-semibold text-nps-text">{list.length}</span> {category === "blurry" ? t("organize.blurryBelow", { threshold }) : t("organize.inCategory")}</div>
+        <div className="text-[13px] text-nps-text-dim"><span className="font-semibold text-nps-text">{list.length}</span> {category === "blurry" ? t("organize.blurryBelow", { threshold }) : t("organize.inCategory")}{folder && <span className="ml-2 text-nps-accent">· 📂 {folder.split("/").pop()}</span>}</div>
         <div className="flex items-center gap-2 ml-2">
           <button type="button" onClick={() => selectMany(orderedPaths)} className="px-2.5 py-1 rounded text-[11px] border border-nps-border bg-nps-tertiary hover:bg-nps-hover">{t("organize.selectAll")}</button>
           {selectedCount > 0 && <button type="button" onClick={() => requestDelete(photos.filter((photo) => photo.selected).map((photo) => photo.filePath))} className="px-2.5 py-1 rounded text-[11px] bg-red-500/20 text-red-400 border border-red-500/30">🗑 {t("organize.deleteSelected")}</button>}

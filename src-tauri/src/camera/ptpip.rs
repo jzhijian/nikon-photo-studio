@@ -32,6 +32,8 @@ pub enum PtpError {
 // PTP/IP packet types
 const PTPIP_INIT_COMMAND_REQUEST: u32 = 1;
 const PTPIP_INIT_COMMAND_ACK: u32 = 2;
+const PTPIP_INIT_EVENT_REQUEST: u32 = 3;
+const PTPIP_INIT_EVENT_ACK: u32 = 4;
 const PTPIP_COMMAND_REQUEST: u32 = 6;
 const PTPIP_COMMAND_RESPONSE: u32 = 7;
 const PTPIP_START_DATA_PACKET: u32 = 9;
@@ -99,12 +101,11 @@ impl PtpIpClient {
         payload.extend_from_slice(&self.guid);
         // Host name (UTF-16LE, null-terminated): "NikonPhotoStudio"
         let name = "NikonPhotoStudio";
-        payload.write_u32::<LittleEndian>(name.len() as u32 + 1)?;
         for c in name.encode_utf16() {
             payload.write_u16::<LittleEndian>(c)?;
         }
         payload.write_u16::<LittleEndian>(0)?; // null terminator
-        payload.write_u32::<LittleEndian>(0)?; // version major.minor
+        payload.write_u32::<LittleEndian>(0x0001_0000)?; // PTP/IP 1.0
 
         self.write_packet(PTPIP_INIT_COMMAND_REQUEST, &payload)?;
 
@@ -122,25 +123,32 @@ impl PtpIpClient {
             return Err(PtpError::Protocol("Init ack too short".into()));
         }
 
-        // Open data connection
+        let connection_id = Cursor::new(&data[..4]).read_u32::<LittleEndian>()?;
+        // Open the required event connection.
         let peer = self.cmd_stream.peer_addr()?;
         let data_stream = TcpStream::connect_timeout(&peer, Duration::from_secs(10))
             .map_err(|e| PtpError::Connection(format!("Data channel failed: {}", e)))?;
         data_stream.set_read_timeout(Some(Duration::from_secs(60)))?;
 
-        // Send Init_Command_Request on data channel too
+        // Associate the event socket with the command/data socket.
         let mut data_payload = Vec::new();
-        data_payload.extend_from_slice(&self.guid);
-        data_payload.write_u32::<LittleEndian>(name.len() as u32 + 1)?;
-        for c in name.encode_utf16() {
-            data_payload.write_u16::<LittleEndian>(c)?;
-        }
-        data_payload.write_u16::<LittleEndian>(0)?;
-        data_payload.write_u32::<LittleEndian>(0)?;
+        data_payload.write_u32::<LittleEndian>(connection_id)?;
 
         let mut ds = &data_stream;
-        let pkt = Self::build_packet(PTPIP_INIT_COMMAND_REQUEST, &data_payload);
+        let pkt = Self::build_packet(PTPIP_INIT_EVENT_REQUEST, &data_payload);
         ds.write_all(&pkt)?;
+        let mut header = [0u8; 8];
+        ds.read_exact(&mut header)?;
+        let mut event_header = Cursor::new(&header);
+        let event_len = event_header.read_u32::<LittleEndian>()?;
+        let event_type = event_header.read_u32::<LittleEndian>()?;
+        if event_type != PTPIP_INIT_EVENT_ACK || event_len < 8 {
+            return Err(PtpError::Protocol(format!("Expected Init_Event_Ack (4), got {event_type}")));
+        }
+        if event_len > 8 {
+            let mut discard = vec![0u8; (event_len - 8) as usize];
+            ds.read_exact(&mut discard)?;
+        }
 
         self.data_stream = Some(data_stream);
         Ok(())
@@ -165,6 +173,36 @@ impl PtpIpClient {
                 code
             ))),
         }
+    }
+
+    pub fn get_device_model(&mut self) -> Result<String, PtpError> {
+        self.transaction_id += 1;
+        let tid = self.transaction_id;
+        let resp = self.send_command(PTP_GET_DEVICE_INFO, tid, &[])?;
+        if resp.code != PTP_OK { return Err(PtpError::Protocol(format!("GetDeviceInfo failed: 0x{:04X}", resp.code))); }
+        let data = resp.data.ok_or_else(|| PtpError::Protocol("GetDeviceInfo returned no data".into()))?;
+        let mut cursor = Cursor::new(data.as_slice());
+        let _standard = cursor.read_u16::<LittleEndian>()?;
+        let _vendor = cursor.read_u32::<LittleEndian>()?;
+        let _vendor_version = cursor.read_u16::<LittleEndian>()?;
+        let _description = Self::read_ptp_string(&mut cursor)?;
+        let _mode = cursor.read_u16::<LittleEndian>()?;
+        for _ in 0..5 {
+            let count = cursor.read_u32::<LittleEndian>()? as u64;
+            cursor.set_position(cursor.position().saturating_add(count * 2));
+        }
+        let manufacturer = Self::read_ptp_string(&mut cursor)?.unwrap_or_else(|| "Nikon".into());
+        let model = Self::read_ptp_string(&mut cursor)?.unwrap_or_else(|| "Camera".into());
+        Ok(if model.to_ascii_lowercase().contains("nikon") { model } else { format!("{manufacturer} {model}") })
+    }
+
+    fn read_ptp_string(cursor: &mut Cursor<&[u8]>) -> Result<Option<String>, PtpError> {
+        let len = cursor.read_u8()? as usize;
+        if len == 0 { return Ok(None); }
+        let mut chars = Vec::with_capacity(len);
+        for _ in 0..len { chars.push(cursor.read_u16::<LittleEndian>()?); }
+        while chars.last() == Some(&0) { chars.pop(); }
+        Ok(String::from_utf16(&chars).ok())
     }
 
     /// Get all object handles from the camera
@@ -268,8 +306,17 @@ impl PtpIpClient {
     fn send_command(&mut self, opcode: u16, tid: u32, params: &[u8]) -> Result<PtpResponse, PtpError> {
         // Build Command_Request packet
         let mut payload = Vec::new();
-        payload.write_u32::<LittleEndian>(tid)?;
+        // CIPA PTP/IP: 1=no data phase, 2=data out, 3=data in. All read
+        // operations used by the browser require data-in; session commands do
+        // not. Advertising "no data" for GetObject was why a connected Nikon
+        // returned an empty grid in the former implementation.
+        let data_phase = match opcode {
+            PTP_GET_DEVICE_INFO | PTP_GET_OBJECT_HANDLES | PTP_GET_OBJECT_INFO | PTP_GET_OBJECT | PTP_GET_THUMB => 3,
+            _ => 1,
+        };
+        payload.write_u32::<LittleEndian>(data_phase)?;
         payload.write_u16::<LittleEndian>(opcode)?;
+        payload.write_u32::<LittleEndian>(tid)?;
         payload.extend_from_slice(params);
 
         self.write_packet(PTPIP_COMMAND_REQUEST, &payload)?;
@@ -286,28 +333,28 @@ impl PtpIpClient {
             let (ptype, data) = self.read_packet()?;
             match ptype {
                 PTPIP_START_DATA_PACKET => {
-                    // First data packet: contains total length (4 bytes) + data
+                    // transaction id (4) + total length (8) + optional data
                     let mut buf = Vec::new();
-                    if data.len() > 4 {
-                        buf.extend_from_slice(&data[4..]);
+                    if data.len() > 12 {
+                        buf.extend_from_slice(&data[12..]);
                     }
                     data_buf = Some(buf);
                 }
                 PTPIP_DATA_PACKET => {
                     if let Some(ref mut buf) = data_buf {
-                        buf.extend_from_slice(&data);
+                        if data.len() > 4 { buf.extend_from_slice(&data[4..]); }
                     }
                 }
                 PTPIP_END_DATA_PACKET => {
                     if let Some(ref mut buf) = data_buf {
-                        buf.extend_from_slice(&data);
+                        if data.len() > 4 { buf.extend_from_slice(&data[4..]); }
                     }
                 }
                 PTPIP_COMMAND_RESPONSE => {
-                    // Parse: transaction_id(4) + response_code(2) + params
+                    // Parse: response_code(2) + transaction_id(4) + params
                     let mut cursor = Cursor::new(&data);
-                    let _tid = cursor.read_u32::<LittleEndian>()?;
                     response_code = cursor.read_u16::<LittleEndian>()?;
+                    let _tid = cursor.read_u32::<LittleEndian>()?;
                     break;
                 }
                 other => {
@@ -376,6 +423,13 @@ impl PtpIpClient {
         let width = cursor.read_u32::<LittleEndian>()?;
         let height = cursor.read_u32::<LittleEndian>()?;
 
+        // Consume the remaining fixed fields before the first PTP string.
+        let _bit_depth = cursor.read_u32::<LittleEndian>()?;
+        let _parent = cursor.read_u32::<LittleEndian>()?;
+        let _association_type = cursor.read_u16::<LittleEndian>()?;
+        let _association_desc = cursor.read_u32::<LittleEndian>()?;
+        let _sequence = cursor.read_u32::<LittleEndian>()?;
+
         // Skip to filename (position after fixed fields)
         let pos = cursor.position() as usize;
         let remaining = &data[pos..];
@@ -391,6 +445,7 @@ impl PtpIpClient {
             date: String::new(),
             width,
             height,
+            source_path: None,
         })
     }
 

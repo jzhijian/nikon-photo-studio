@@ -11,6 +11,7 @@ import LibraryView from "./modules/library/LibraryView";
 import OrganizeView from "./modules/organize/OrganizeView";
 import PresetsView from "./modules/presets/PresetsView";
 import TransferView from "./modules/transfer/TransferView";
+import { restoreWorkspace } from "./lib/persistence";
 
 /** Left sidebar with a draggable resize handle and collapse support. */
 function LeftSidebar() {
@@ -55,6 +56,12 @@ function LeftSidebar() {
 function App() {
   const activeModule = useAppStore((s) => s.activeModule);
   const setDevelopPath = useLibraryStore((s) => s.setDevelopPath);
+  useEffect(() => {
+    let active = true;
+    let dispose: (() => void) | undefined;
+    void restoreWorkspace().then((fn) => { if (active) dispose = fn; else fn(); });
+    return () => { active = false; dispose?.(); };
+  }, []);
   // Library and Organize both own an in-place develop viewer. Presets and
   // Transfer do not, so only those modules close it.
   useEffect(() => {

@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use tauri::State;
 use super::ptpip::{PtpIpClient, DEFAULT_AP_HOST, DEFAULT_PTPIP_PORT};
-use super::{CameraConnection, CameraPhoto, CameraState, ConnectionType, DownloadProgress};
+use super::{CameraConnection, CameraPhoto, CameraState, ConnectionType};
 
 #[derive(Debug, Deserialize)]
 pub struct ConnectWifiArgs {
@@ -30,6 +30,8 @@ pub async fn connect_wifi(
     let mut client = PtpIpClient::connect(&host, port)
         .map_err(|e| format!("Connection failed: {}", e))?;
 
+    let camera_model = client.get_device_model().unwrap_or_else(|_| "Nikon camera".to_string());
+
     let session_id = client.open_session()
         .map_err(|e| format!("Session failed: {}", e))?;
 
@@ -37,7 +39,7 @@ pub async fn connect_wifi(
         conn_type: if args.mode == "sta" { ConnectionType::WifiSTA } else { ConnectionType::WifiAP },
         host: host.clone(),
         port,
-        camera_model: "Nikon Z30".to_string(), // TODO: get from DeviceInfo
+        camera_model: camera_model.clone(),
         session_id,
     };
 
@@ -46,7 +48,7 @@ pub async fn connect_wifi(
     Ok(ConnectResult {
         success: true,
         message: format!("Connected to {}:{} (session {})", host, port, session_id),
-        camera_model: Some("Nikon Z30".to_string()),
+        camera_model: Some(camera_model),
     })
 }
 
@@ -64,8 +66,9 @@ pub async fn connect_usb(state: State<'_, CameraState>) -> Result<ConnectResult,
     }
 
     let (path, name) = &devices[0];
-    let _camera = super::usb::UsbCamera::connect(path)
+    let camera = super::usb::UsbCamera::connect(path)
         .map_err(|e| format!("USB connect failed: {}", e))?;
+    *state.usb_catalog.lock().unwrap() = camera.records().to_vec();
 
     let conn = CameraConnection {
         conn_type: ConnectionType::USB,
@@ -87,6 +90,7 @@ pub async fn connect_usb(state: State<'_, CameraState>) -> Result<ConnectResult,
 #[tauri::command]
 pub async fn disconnect(state: State<'_, CameraState>) -> Result<String, String> {
     *state.connection.lock().unwrap() = None;
+    state.usb_catalog.lock().unwrap().clear();
     Ok("Disconnected".to_string())
 }
 
@@ -94,6 +98,10 @@ pub async fn disconnect(state: State<'_, CameraState>) -> Result<String, String>
 pub async fn list_photos(state: State<'_, CameraState>) -> Result<Vec<CameraPhoto>, String> {
     let conn = state.connection.lock().unwrap();
     let conn = conn.as_ref().ok_or("Not connected")?;
+
+    if matches!(conn.conn_type, ConnectionType::USB) {
+        return Ok(state.usb_catalog.lock().unwrap().iter().map(|record| record.photo.clone()).collect());
+    }
 
     let mut client = PtpIpClient::connect(&conn.host, conn.port)
         .map_err(|e| format!("Reconnect failed: {}", e))?;
@@ -118,6 +126,13 @@ pub async fn download_photo(
     let conn = state.connection.lock().unwrap();
     let conn = conn.as_ref().ok_or("Not connected")?;
 
+    if matches!(conn.conn_type, ConnectionType::USB) {
+        let record = state.usb_catalog.lock().unwrap().iter().find(|record| record.photo.handle == handle).cloned()
+            .ok_or_else(|| format!("USB photo handle {handle} not found"))?;
+        super::usb::UsbCamera::download(&record, &dest_path).map_err(|e| e.to_string())?;
+        return Ok(dest_path);
+    }
+
     let mut client = PtpIpClient::connect(&conn.host, conn.port)
         .map_err(|e| format!("Reconnect failed: {}", e))?;
     client.open_session().map_err(|e| e.to_string())?;
@@ -135,6 +150,10 @@ pub async fn get_thumbnail(
 ) -> Result<Vec<u8>, String> {
     let conn = state.connection.lock().unwrap();
     let conn = conn.as_ref().ok_or("Not connected")?;
+
+    if matches!(conn.conn_type, ConnectionType::USB) {
+        return Err("Windows MTP does not expose camera thumbnails directly; download the file to preview it".into());
+    }
 
     let mut client = PtpIpClient::connect(&conn.host, conn.port)
         .map_err(|e| format!("Reconnect failed: {}", e))?;

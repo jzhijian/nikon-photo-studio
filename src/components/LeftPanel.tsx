@@ -214,31 +214,42 @@ function LibraryLeft() {
 
 function OrganizeLeft() {
   const { t, i18n } = useTranslation();
-  const { category, threshold, sensitivity, useGpu, setCategory, setThreshold, setSensitivity, setUseGpu } = useOrganizeStore();
+  const { category, threshold, portraitThreshold, sensitivity, useGpu, setCategory, setThreshold, setPortraitThreshold, setSensitivity, setUseGpu } = useOrganizeStore();
   const photos = useLibraryStore((s) => s.photos);
+  const folder = useLibraryStore((s) => s.folder);
+  const setFolder = useLibraryStore((s) => s.setFolder);
   const removeMany = useLibraryStore((s) => s.removeMany);
   const runBlurDetection = useLibraryStore((s) => s.runBlurDetection);
-  const runClassification = useLibraryStore((s) => s.runClassification);
+  const runPortraitDetection = useLibraryStore((s) => s.runPortraitDetection);
+  const applyPortraitThreshold = useLibraryStore((s) => s.applyPortraitThreshold);
   const detecting = useLibraryStore((s) => s.detecting);
 
-  const blurryCount = photos.filter((p) => p.blurScore >= 0 && p.blurScore < threshold).length;
+  const folders = selectFolders(photos);
+  const scoped = folder ? photos.filter((p) => p.folder === folder) : photos;
+  const scopedPaths = scoped.map((p) => p.filePath);
+  const blurryCount = scoped.filter((p) => p.blurScore >= 0 && p.blurScore < threshold).length;
 
   const doDetect = async () => {
     if (photos.length === 0) return;
     toast(t("organize.detectingMsg"), "info");
-    const n = await runBlurDetection(sensitivity, useGpu);
+    const n = await runBlurDetection(sensitivity, useGpu, scopedPaths);
     toast(t("organize.detectedMsg", { count: n }), "success");
   };
 
   const doClassify = async () => {
     if (photos.length === 0) return;
     toast(t("organize.classifyingMsg"), "info");
-    const n = await runClassification();
+    const n = await runPortraitDetection(portraitThreshold, scopedPaths);
     toast(t("organize.classifiedMsg", { count: n }), "success");
   };
 
   return (
     <>
+      <div className="mb-4">
+        <SectionTitle>{i18n.language.startsWith("zh") ? "整理范围" : "Organize Scope"}</SectionTitle>
+        <PanelItem label={`📁 ${i18n.language.startsWith("zh") ? "全部文件夹" : "All folders"}`} badge={String(photos.length)} active={folder === null} onClick={() => setFolder(null)} />
+        {folders.map((item) => <PanelItem key={item.folder} label={`📂 ${item.folder.split("/").pop()}`} badge={String(item.count)} active={folder === item.folder} onClick={() => setFolder(item.folder)} title={item.folder} />)}
+      </div>
       <div className="mb-4">
         <SectionTitle>{t("organize.aiTools")}</SectionTitle>
 
@@ -329,6 +340,20 @@ function OrganizeLeft() {
 
       <div className="mb-4">
         <SectionTitle>{t("organize.categories")}</SectionTitle>
+        <div className="mb-3">
+          <div className="px-1 mb-1 flex justify-between text-[10px] text-nps-text-dim">
+            <span>{i18n.language.startsWith("zh") ? "人像宽松 (40)" : "Portrait lenient (40)"}</span>
+            <span className="text-nps-accent font-bold text-[12px]">{portraitThreshold}%</span>
+            <span>{i18n.language.startsWith("zh") ? "严格 (95)" : "Strict (95)"}</span>
+          </div>
+          <input type="range" min={40} max={95} step={1} value={portraitThreshold}
+            onChange={(event) => { const value = Number(event.target.value); setPortraitThreshold(value); applyPortraitThreshold(value); }}
+            className="w-full h-2 rounded-full appearance-none cursor-pointer"
+            style={{ background: "linear-gradient(to right, #22c55e 0%, #eab308 55%, #ef4444 100%)" }} />
+          <div className="text-[10px] text-nps-text-dim mt-1 px-1">
+            {i18n.language.startsWith("zh") ? `置信度达到阈值的 ${scoped.filter((p) => p.classificationConfidence >= portraitThreshold / 100).length} 张照片归为人像` : `${scoped.filter((p) => p.classificationConfidence >= portraitThreshold / 100).length} photos meet the portrait threshold`}
+          </div>
+        </div>
         <PanelItem
           label={`🌫️ ${t("organize.blurry")}`}
           badge={String(blurryCount)}
@@ -337,19 +362,13 @@ function OrganizeLeft() {
         />
         <PanelItem
           label={`👤 ${t("organize.portrait")}`}
-          badge={String(photos.filter((p) => p.category === "portrait").length)}
+          badge={String(scoped.filter((p) => p.category === "portrait").length)}
           active={category === "portrait"}
           onClick={() => setCategory("portrait")}
         />
         <PanelItem
-          label={`🏞️ ${t("organize.landscape")}`}
-          badge={String(photos.filter((p) => p.category === "landscape").length)}
-          active={category === "landscape"}
-          onClick={() => setCategory("landscape")}
-        />
-        <PanelItem
           label={`📦 ${t("organize.others")}`}
-          badge={String(photos.filter((p) => p.category === "other").length)}
+          badge={String(scoped.filter((p) => p.category === "other").length)}
           active={category === "other"}
           onClick={() => setCategory("other")}
         />
@@ -479,36 +498,41 @@ function PresetsLeft() {
 }
 function TransferLeft() {
   const { t } = useTranslation();
-  const { connectionType, quality, connected, setConnectionType, setQuality } = useTransferStore();
+  const { connectionType, quality, connected, cameraModel, connectionDetail, cameraPhotos, connectionError, setConnectionType, setQuality } = useTransferStore();
 
   return (
     <>
       <div className="mb-4">
         <SectionTitle>{t("transfer.connection")}</SectionTitle>
         <PanelItem
-          label="📱 Wi-Fi AP"
+          label="📱 Wi‑Fi 直连（AP）"
           active={connectionType === "wifi-ap"}
           onClick={() => {
             setConnectionType("wifi-ap");
-            toast("Wi-Fi AP · Nikon Z30", "success");
+            toast("直连模式：电脑连接相机创建的 Wi‑Fi");
           }}
         />
         <PanelItem
-          label="🏠 Wi-Fi STA"
+          label="🏠 Wi‑Fi 基础设施（STA）"
           active={connectionType === "wifi-sta"}
           onClick={() => {
             setConnectionType("wifi-sta");
-            toast("Wi-Fi STA · Nikon Z5II", "success");
+            toast("基础设施模式：相机与电脑连接同一路由器");
           }}
         />
         <PanelItem
-          label="🔌 USB"
+          label="🔌 USB（MTP/PTP）"
           active={connectionType === "usb"}
           onClick={() => {
             setConnectionType("usb");
             toast("USB (MTP/PTP)", "success");
           }}
         />
+        <div className="mt-2 px-1 text-[10px] leading-relaxed text-nps-text-dim">
+          {connectionType === "wifi-ap" && "相机提供无线网络；Windows 显示“无 Internet”正常。"}
+          {connectionType === "wifi-sta" && "相机和电脑须在同一局域网，并使用相机的 IPv4 地址。"}
+          {connectionType === "usb" && "相机菜单中的 USB 模式须设为 MTP/PTP。"}
+        </div>
       </div>
 
       <div className="mb-4">
@@ -518,14 +542,12 @@ function TransferLeft() {
             <div className="flex items-center gap-2 p-2.5 bg-nps-tertiary rounded mb-2">
               <div className="w-2.5 h-2.5 rounded-full bg-nps-success animate-pulse" />
               <div>
-                <div className="text-[13px] font-semibold">Nikon Z30</div>
-                <div className="text-[11px] text-nps-text-dim">{connectionType === "usb" ? "USB (MTP/PTP)" : "192.168.1.1:15740"}</div>
+                <div className="text-[13px] font-semibold">{cameraModel}</div>
+                <div className="text-[11px] text-nps-text-dim">{connectionDetail}</div>
               </div>
             </div>
             <div className="text-xs space-y-1 px-1">
-              <div className="flex justify-between"><span className="text-nps-text-dim">{t("transfer.battery")}</span><span>78%</span></div>
-              <div className="flex justify-between"><span className="text-nps-text-dim">{t("transfer.storage")}</span><span>128/256 GB</span></div>
-              <div className="flex justify-between"><span className="text-nps-text-dim">{t("transfer.photoCount")}</span><span>48</span></div>
+              <div className="flex justify-between"><span className="text-nps-text-dim">{t("transfer.photoCount")}</span><span>{cameraPhotos.length}</span></div>
             </div>
           </>
         ) : (
@@ -534,6 +556,7 @@ function TransferLeft() {
             <div className="text-[12px] text-nps-text-dim">{t("transfer.notConnected")}</div>
           </div>
         )}
+        {connectionError && <div className="mt-2 text-[10px] leading-relaxed text-nps-danger">{connectionError}</div>}
       </div>
 
       <div className="mb-4">

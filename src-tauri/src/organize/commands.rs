@@ -33,24 +33,18 @@ pub async fn batch_detect_blur(
 }
 
 #[tauri::command]
-pub async fn classify_photo(path: String, model_dir: String) -> Result<ClassifyResult, String> {
-    let classifier = Classifier::new(&model_dir)?;
-    classifier.classify_file(&path)
-}
-
-#[tauri::command]
-pub async fn batch_classify(
+pub async fn batch_detect_portraits(
     paths: Vec<String>,
-    model_dir: String,
+    threshold: f32,
 ) -> Result<Vec<ClassifyResult>, String> {
     // Run on a blocking thread so the parallel worker pool does not stall the
     // async runtime.
     tokio::task::spawn_blocking(move || {
-        let classifier = Classifier::new(&model_dir)?;
-        Ok(classifier.classify_batch(&paths))
+        let classifier = Classifier::new()?;
+        Ok(classifier.detect_batch(&paths, threshold))
     })
     .await
-    .map_err(|e| format!("classify task failed: {e}"))?
+    .map_err(|e| format!("portrait detection task failed: {e}"))?
 }
 
 #[tauri::command]

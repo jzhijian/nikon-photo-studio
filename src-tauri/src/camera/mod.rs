@@ -8,11 +8,12 @@ use std::sync::Mutex;
 /// Camera connection state managed by Tauri
 pub struct CameraState {
     pub connection: Mutex<Option<CameraConnection>>,
+    pub usb_catalog: Mutex<Vec<usb::UsbPhotoRecord>>,
 }
 
 impl Default for CameraState {
     fn default() -> Self {
-        Self { connection: Mutex::new(None) }
+        Self { connection: Mutex::new(None), usb_catalog: Mutex::new(Vec::new()) }
     }
 }
 
@@ -41,6 +42,7 @@ pub struct CameraPhoto {
     pub date: String,
     pub width: u32,
     pub height: u32,
+    pub source_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

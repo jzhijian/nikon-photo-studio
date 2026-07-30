@@ -315,6 +315,31 @@ fn render_resized(
     encode_jpeg(&out, quality)
 }
 
+/// Produce a develop-viewer preview for an ordinary raster file. A JPEG that
+/// already fits the requested size and has normal EXIF orientation is returned
+/// byte-for-byte: decoding and JPEG-encoding it again softens fine detail that
+/// becomes visible at 400-800% zoom. Files that need resizing/orientation (and
+/// non-JPEG formats) still use the high-quality render path.
+fn render_raster_full_preview(path: &str, max: u32) -> Result<Vec<u8>, String> {
+    let ext = std::path::Path::new(path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+    if ext == "jpg" || ext == "jpeg" {
+        let bytes = std::fs::read(path).map_err(|e| format!("read failed: {e}"))?;
+        let orientation = jpeg_exif_orientation(&bytes);
+        if orientation == 1 {
+            if let Some((w, h)) = jpeg_dimensions(&bytes) {
+                if w <= max && h <= max {
+                    return Ok(bytes);
+                }
+            }
+        }
+    }
+    render_resized(path, max, image::imageops::FilterType::Lanczos3, 98)
+}
+
 fn data_url(bytes: &[u8]) -> String {
     format!("data:image/jpeg;base64,{}", base64_encode::encode(bytes))
 }
@@ -613,7 +638,7 @@ pub async fn make_full_preview(path: String, max_size: Option<u32>) -> Result<St
             // canvas even though it displays correctly in a plain <img>.
             // Versioned cache kind invalidates previews made before the RAW
             // orientation and capture-sharpening fixes.
-            if let Some(entry) = thumb_cache::entry_path(&path, max, "rawfull-v3") {
+            if let Some(entry) = thumb_cache::entry_path(&path, max, "rawfull-v4") {
                 if entry.exists() {
                     if let Some(bytes) = thumb_cache::read(&entry) {
                         return Ok(data_url(&bytes));
@@ -636,17 +661,19 @@ pub async fn make_full_preview(path: String, max_size: Option<u32>) -> Result<St
             return Ok(data_url(&buf));
         }
 
-        if let Some(entry) = thumb_cache::entry_path(&path, max, "full") {
+        // Version 2 preserves native JPEG bytes whenever no resize/orientation
+        // transform is necessary, replacing the old quality-95 re-encode.
+        if let Some(entry) = thumb_cache::entry_path(&path, max, "full-v2") {
             if entry.exists() {
                 if let Some(bytes) = thumb_cache::read(&entry) {
                     return Ok(data_url(&bytes));
                 }
             }
-            let buf = render_resized(&path, max, image::imageops::FilterType::Lanczos3, 95)?;
+            let buf = render_raster_full_preview(&path, max)?;
             let _ = thumb_cache::write(&entry, &buf);
             return Ok(data_url(&buf));
         }
-        let buf = render_resized(&path, max, image::imageops::FilterType::Lanczos3, 95)?;
+        let buf = render_raster_full_preview(&path, max)?;
         Ok(data_url(&buf))
     })
     .await
@@ -1490,6 +1517,19 @@ mod cache_tests {
     }
 
     #[test]
+    fn test_full_preview_preserves_native_jpeg_bytes() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("native.jpg");
+        let image = image::DynamicImage::ImageRgb8(image::RgbImage::from_fn(96, 64, |x, y| {
+            image::Rgb([(x * 2) as u8, (y * 3) as u8, ((x + y) * 2) as u8])
+        }));
+        image.save_with_format(&path, image::ImageFormat::Jpeg).expect("save jpeg");
+        let original = std::fs::read(&path).expect("read original");
+        let preview = render_raster_full_preview(path.to_str().unwrap(), 2048).expect("render full preview");
+        assert_eq!(preview, original, "native JPEG must not be decoded and re-encoded");
+    }
+
+    #[test]
     fn test_data_url_has_prefix() {
         let url = data_url(&[1, 2, 3]);
         assert!(url.starts_with("data:image/jpeg;base64,"));
@@ -1603,18 +1643,19 @@ mod cache_tests {
         write_test_png(&src, 200, 120);
         let src_str = src.to_str().unwrap();
 
-        // First call renders + caches; returns an existing .fastprev path that
-        // holds a valid JPEG.
+        // Fast previews are deliberately returned inline so WebView2 can read
+        // their pixels from a canvas without cross-origin tainting. The cache
+        // remains an implementation detail behind the stable data URL API.
         let url1 = render_fast_preview(src_str).expect("fast preview renders");
-        assert!(url1.ends_with(".fastprev"), "cached fast preview path, got {url1}");
-        assert!(std::path::Path::new(&url1).exists(), "cache file exists");
-        let bytes = std::fs::read(&url1).expect("read cache");
-        assert_eq!(bytes[0], 0xFF, "JPEG SOI byte 0");
-        assert_eq!(bytes[1], 0xD8, "JPEG SOI byte 1");
+        assert!(url1.starts_with("data:image/jpeg;base64,"));
+        let cache = thumb_cache::entry_path(src_str, 0, "fastprev").expect("cache entry");
+        assert!(cache.exists(), "cache file exists");
+        let bytes = std::fs::read(cache).expect("read cache");
+        assert_eq!(&bytes[..2], &[0xFF, 0xD8], "JPEG SOI bytes");
 
         // Second call is a cache hit -> identical path.
         let url2 = render_fast_preview(src_str).expect("fast preview cached");
-        assert_eq!(url1, url2, "cache hit returns the same entry");
+        assert_eq!(url1, url2, "cache hit returns identical inline bytes");
     }
 
     /// Integration check (only when NPS_TEST_NEF points at a real NEF): the fast
