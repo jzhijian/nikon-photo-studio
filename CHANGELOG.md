@@ -2,6 +2,22 @@
 
 本文件按日期倒序记录项目每天完成的功能、修复、验证结果和仍需实机确认的事项。
 
+## 2026-07-31
+
+### USB / MTP 修复
+
+- 修复 Windows 已识别 Nikon 相机、资源管理器能看到照片，但应用显示 0 张的问题。
+- 根因是 Rust 以 `powershell -Command -` 逐行输入多行脚本，递归 `Walk` 函数没有作为完整脚本块可靠执行；设备扫描是单段表达式，因此只出现“能连接设备、无法读取照片”的不一致状态。
+- PowerShell 调用改为在 STA COM 线程中把完整脚本作为单个 `-Command` 参数执行，兼容 Windows Portable Devices / Explorer Shell。
+- MTP 文件大小改为读取 Explorer 使用的 `System.Size` 扩展属性；便携设备上的普通 `ShellItem.Size` 经常错误返回 0。
+- 新增可选实机集成测试：没有 Nikon 相机时跳过；连接相机时验证设备枚举、照片数量、真实文件大小和首张照片下载。
+
+### Z30 实机验证
+
+- Windows WPD 正确识别当前设备 `Z 30`。
+- 从 `可移动存储/DCF/DCIM/100NZ_30` 等目录递归读取到 1114 张 NEF/JPEG/TIFF 照片。
+- 第一张 NEF 已下载到临时目录，落盘字节数与 MTP `System.Size` 一致；测试结束后临时文件自动删除。
+
 ## 2026-07-30
 
 ### 新增
