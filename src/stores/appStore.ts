@@ -15,6 +15,9 @@ interface AppState {
   leftCollapsed: boolean;
   setLeftWidth: (w: number) => void;
   toggleLeftCollapsed: () => void;
+  exportOpen: boolean;
+  openExport: () => void;
+  closeExport: () => void;
 }
 
 function applyTheme(theme: Theme) {
@@ -45,4 +48,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   leftCollapsed: false,
   setLeftWidth: (leftWidth) => set({ leftWidth: Math.min(420, Math.max(150, leftWidth)), leftCollapsed: false }),
   toggleLeftCollapsed: () => set((s) => ({ leftCollapsed: !s.leftCollapsed })),
+  exportOpen: false,
+  openExport: () => set({ exportOpen: true }),
+  closeExport: () => set({ exportOpen: false }),
 }));

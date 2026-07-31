@@ -7,6 +7,7 @@ mod organize;
 mod presets;
 mod fs;
 mod db;
+mod export;
 
 use tauri::Manager;
 
@@ -51,6 +52,7 @@ fn main() {
             db::save_app_state,
             db::load_app_state,
             db::existing_paths,
+            export::export_photo,
             // Organize commands
             organize::commands::detect_blur,
             organize::commands::batch_detect_blur,

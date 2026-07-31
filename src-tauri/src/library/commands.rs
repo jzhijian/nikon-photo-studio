@@ -556,7 +556,7 @@ fn rawler_orientation_to_u8(o: rawler::decoders::Orientation) -> u8 {
 /// embedded preview JPEG, because it uses the sensor's native resolution. It is
 /// heavier (full demosaic of a multi-megapixel RAW), so it is reserved for the
 /// develop viewer's full preview and cached on disk (kind "rawfull").
-fn render_nef_full_raw(path: &str, max: u32, quality: u8) -> Result<Vec<u8>, String> {
+fn develop_nef_full(path: &str) -> Result<image::DynamicImage, String> {
     let rawimage = rawler::decode_file(path).map_err(|e| format!("raw decode failed: {e}"))?;
     let rawler_orientation = rawler_orientation_to_u8(rawimage.orientation);
     let dev = rawler::imgop::develop::RawDevelop::default();
@@ -585,11 +585,25 @@ fn render_nef_full_raw(path: &str, max: u32, quality: u8) -> Result<Vec<u8>, Str
         })
         .unwrap_or((rawler_orientation, matches!(rawler_orientation, 5..=8)));
     let raw_portrait = img.height() > img.width();
-    let oriented = if raw_portrait == preview_portrait {
+    Ok(if raw_portrait == preview_portrait {
         img
     } else {
         apply_orientation(img, orientation)
-    };
+    })
+}
+
+/// Load the full-resolution, correctly-oriented source used by final export.
+/// Unlike `load_oriented_image`, NEF files are demosaiced from sensor data and
+/// never fall back to the small embedded JPEG unless the caller chooses to.
+pub(crate) fn load_export_image(path: &str) -> Result<image::DynamicImage, String> {
+    let ext = std::path::Path::new(path)
+        .extension().and_then(|value| value.to_str()).unwrap_or("")
+        .to_ascii_lowercase();
+    if ext == "nef" || ext == "nrw" { develop_nef_full(path) } else { load_oriented_image(path) }
+}
+
+fn render_nef_full_raw(path: &str, max: u32, quality: u8) -> Result<Vec<u8>, String> {
+    let oriented = develop_nef_full(path)?;
     let resized = if oriented.width() <= max && oriented.height() <= max {
         oriented
     } else {

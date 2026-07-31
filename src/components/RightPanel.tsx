@@ -359,7 +359,7 @@ function LibraryRight() {
   const canUndo = useLibraryStore((s) => s.adjustHistory.length > 0);
   const photo = photos.find((p) => p.filePath === selectedPath) ?? null;
   const [exif, setExif] = useState<ExifInfo | null>(null);
-  const [exporting, setExporting] = useState(false);
+  const openExport = useAppStore((s) => s.openExport);
   const presets = usePresetStore((s) => s.presets);
   const applyPreset = usePresetStore((s) => s.apply);
 
@@ -422,28 +422,6 @@ function LibraryRight() {
         },
       });
     } catch { /* best-effort sidecar */ }
-  };
-
-  const onExport = async () => {
-    setExporting(true);
-    try {
-      await invoke("apply_preset", {
-        photoPath: photo.filePath,
-        presetParams: {
-          exposure: adjust.exposure !== 0 ? adjust.exposure : null,
-          contrast: adjust.contrast !== 0 ? adjust.contrast / 100.0 : null,
-          highlights: adjust.highlights !== 0 ? adjust.highlights / 100.0 : null,
-          shadows: adjust.shadows !== 0 ? adjust.shadows / 100.0 : null,
-          temperature: adjust.temperature !== 5500 ? adjust.temperature : null,
-          saturation: adjust.saturation !== 0 ? adjust.saturation / 100.0 : null,
-        },
-      });
-      toast(t("presets.applyExportMsg"), "success");
-    } catch {
-      toast(t("presets.applyExportMsg"), "success");
-    } finally {
-      setExporting(false);
-    }
   };
 
   return (
@@ -533,11 +511,10 @@ function LibraryRight() {
       <div className="py-3">
         <button
           type="button"
-          onClick={onExport}
-          disabled={exporting}
+          onClick={openExport}
           className="w-full py-2 rounded bg-nps-accent text-nps-primary text-xs font-semibold hover:bg-nps-accent-hover active:scale-[0.98] transition-all disabled:opacity-60"
         >
-          {exporting ? "…" : t("develop.export")}
+          {t("develop.export")}
         </button>
       </div>
 

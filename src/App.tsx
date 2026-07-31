@@ -7,6 +7,7 @@ import RightPanel from "./components/RightPanel";
 import FilmStrip from "./components/FilmStrip";
 import ToastHost from "./components/Toast";
 import Lightbox from "./components/Lightbox";
+import ExportDialog from "./components/ExportDialog";
 import LibraryView from "./modules/library/LibraryView";
 import OrganizeView from "./modules/organize/OrganizeView";
 import PresetsView from "./modules/presets/PresetsView";
@@ -83,6 +84,7 @@ function App() {
       </div>
       {(activeModule === "library" || activeModule === "organize") && <FilmStrip />}
       <Lightbox />
+      <ExportDialog />
       <ToastHost />
     </div>
   );

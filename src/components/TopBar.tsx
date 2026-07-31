@@ -25,6 +25,9 @@ export default function TopBar() {
   } = useAppStore();
   const importFromDialog = useLibraryStore((s) => s.importFromDialog);
   const importing = useLibraryStore((s) => s.importing);
+  const selectedPath = useLibraryStore((s) => s.selectedPath);
+  const developPath = useLibraryStore((s) => s.developPath);
+  const openExport = useAppStore((s) => s.openExport);
 
   const toggleLang = () => {
     const next = language === "zh-CN" ? "en-US" : "zh-CN";
@@ -94,7 +97,10 @@ export default function TopBar() {
           {importing ? t("library.importing") : t("nav.import")}
         </button>
         <button
-          onClick={() => toast(t("nav.exportMsg"), "info")}
+          onClick={() => {
+            if (developPath || selectedPath) openExport();
+            else toast(language === "zh-CN" ? "请先选择一张照片" : "Select a photo first", "info");
+          }}
           className="px-3 py-1 rounded bg-nps-accent text-nps-primary text-xs font-semibold hover:bg-nps-accent-hover active:scale-[0.97] transition-all"
         >
           {t("nav.export")}
