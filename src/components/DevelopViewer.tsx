@@ -6,6 +6,8 @@ import type { AdjustParams, Photo } from "../stores/libraryStore";
 interface Props {
   photo: Photo;
   adjust: AdjustParams;
+  /** Fires after ProcessedImage has painted its first visible canvas frame. */
+  onReady?: () => void;
 }
 
 const MIN_ZOOM = 1;
@@ -23,7 +25,7 @@ const ZOOM_STEP = 1.15;
  * Before/After comparison: split slider, side-by-side, or hold-Y-to-compare.
  * Keyboard: backslash (\) toggles split compare, Y hold-to-compare.
  */
-export default function DevelopViewer({ photo, adjust }: Props) {
+export default function DevelopViewer({ photo, adjust, onReady }: Props) {
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
@@ -167,7 +169,7 @@ export default function DevelopViewer({ photo, adjust }: Props) {
           {/* Adjusted (full background) */}
           <div className="absolute inset-0 flex items-center justify-center p-8">
             <div className="max-w-full max-h-full w-full h-full flex items-center justify-center">
-              <ProcessedImage photo={photo} settings={adjust} />
+              <ProcessedImage photo={photo} settings={adjust} onReady={onReady} />
             </div>
           </div>
           {/* Original (clipped to left of split) */}
@@ -176,7 +178,7 @@ export default function DevelopViewer({ photo, adjust }: Props) {
             style={{ clipPath: `inset(0 ${100 - splitPos}% 0 0)` }}
           >
             <div className="max-w-full max-h-full w-full h-full flex items-center justify-center">
-              <ProcessedImage photo={photo} settings={adjust} bypass />
+              <ProcessedImage photo={photo} settings={adjust} bypass onReady={onReady} />
             </div>
           </div>
           {/* Split divider */}
@@ -219,7 +221,7 @@ export default function DevelopViewer({ photo, adjust }: Props) {
       <div className="w-full h-full flex overflow-hidden select-none relative">
         <div className="flex-1 flex items-center justify-center p-4 border-r border-nps-border relative">
           <div className="max-w-full max-h-full w-full h-full flex items-center justify-center">
-            <ProcessedImage photo={photo} settings={adjust} bypass />
+            <ProcessedImage photo={photo} settings={adjust} bypass onReady={onReady} />
           </div>
           <div className="absolute top-3 left-3 px-2 py-0.5 rounded bg-black/60 text-[10px] text-white/90">
             原图
@@ -227,7 +229,7 @@ export default function DevelopViewer({ photo, adjust }: Props) {
         </div>
         <div className="flex-1 flex items-center justify-center p-4 relative">
           <div className="max-w-full max-h-full w-full h-full flex items-center justify-center">
-            <ProcessedImage photo={photo} settings={adjust} />
+            <ProcessedImage photo={photo} settings={adjust} onReady={onReady} />
           </div>
           <div className="absolute top-3 right-3 px-2 py-0.5 rounded bg-black/60 text-[10px] text-white/90">
             修改后
@@ -265,7 +267,7 @@ export default function DevelopViewer({ photo, adjust }: Props) {
           transition: dragging ? "none" : "transform 0.12s ease-out",
         }}
       >
-        <ProcessedImage photo={photo} settings={adjust} bypass={showOriginal} zoom={zoom} />
+        <ProcessedImage photo={photo} settings={adjust} bypass={showOriginal} zoom={zoom} onReady={onReady} />
       </div>
 
       {/* Hold-to-compare indicator */}

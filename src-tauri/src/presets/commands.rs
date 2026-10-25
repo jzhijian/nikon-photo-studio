@@ -2,6 +2,28 @@ use super::parser;
 use super::{Preset, PresetFormat, PresetParams, PresetSource};
 
 #[tauri::command]
+pub async fn inspect_nikon_file(path: String) -> Result<super::nikon_file::NikonInspection, String> {
+    super::nikon_file::NikonFile::read(std::path::Path::new(&path))
+        .map(|file| file.inspection()).map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod import_safety_tests {
+    #[tokio::test]
+    async fn unverified_nikon_binary_is_not_imported_as_neutral_parameters() {
+        let dir = tempfile::tempdir().unwrap();
+        for extension in ["np3", "NP3", "ncp"] {
+            let path = dir.path().join(format!("unverified.{extension}"));
+            let original = b"NCP\0not-a-validated-picture-control";
+            std::fs::write(&path, original).unwrap();
+            let result = super::import_preset(path.to_string_lossy().into_owned()).await;
+            assert!(result.unwrap_err().contains("完整解析尚未验证"));
+            assert_eq!(std::fs::read(path).unwrap(), original);
+        }
+    }
+}
+
+#[tauri::command]
 pub async fn import_preset(path: String) -> Result<Preset, String> {
     let ext = std::path::Path::new(&path)
         .extension()
@@ -10,6 +32,13 @@ pub async fn import_preset(path: String) -> Result<Preset, String> {
 
     let format = PresetFormat::from_extension(ext)
         .ok_or_else(|| format!("Unsupported preset format: {}", ext))?;
+
+    // The historical byte-scanning decoder does not establish Nikon's base
+    // profile, curves or Flexible Color semantics. Do not expose its guesses
+    // as a faithfully rendered preset through the production import command.
+    if matches!(format, PresetFormat::NP3 | PresetFormat::NCP) {
+        return Err("Nikon NP3/NCP 完整解析尚未验证，不能作为电脑调色预设应用；原文件保持不变。云创公开参数可在预设管理中单独查看。".into());
+    }
 
     let params = parser::parse_preset_file(&path, &format)
         .map_err(|e| format!("Parse failed: {}", e))?;

@@ -1,0 +1,42 @@
+{
+  "recipe": {
+    "pictureControl": {
+      "settingName": "MateFilm_Choi matae",
+      "baseName": "FLEXIBLE COLOR",
+      "quickSharp": "-",
+      "sharpening": "+0.75",
+      "middleRangeSharp": "+0.25",
+      "clarity": "-0.50",
+      "contrast": "gamma",
+      "saturation": "-7",
+      "highlight": "gamma",
+      "shadow": "gamma",
+      "whiteLevel": "gamma",
+      "blackLevel": "gamma"
+    },
+    "id": "01M4SD0T78RAGG39JAVXRDR2X0",
+    "name": "Mate Film by Choi matae",
+    "pictureControlName": "MateFilm_Choi matae",
+    "exif": {
+      "model": "NIKON Z f",
+      "dateTimeOriginal": "1767101369000",
+      "exposureTime": "1/1600",
+      "fNumber": "1.4",
+      "exposureProgram": "3",
+      "iso": "100",
+      "exposureBiasValue": "0.0",
+      "meteringMode": "5",
+      "focalLength": "50mm",
+      "exposureMode": "0",
+      "whiteBalance": "AUTO1",
+      "lensModel": "NIKKOR Z 50mm f/1.4",
+      "focusMode": "AF-C",
+      "activeDLighting": "0",
+      "skinSoftening": "0",
+      "portraitImpressionBalance": "0",
+      "afSubjectDetection": "2",
+      "afPrioritySelection": "1",
+      "afAreaMode": "02_c5"
+    }
+  }
+}

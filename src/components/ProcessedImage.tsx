@@ -27,6 +27,8 @@ interface Props {
   /** Current zoom factor of the viewer (used to keep zoomed-in views sharp). */
   zoom?: number;
   className?: string;
+  /** Called after the first canvas frame has actually been painted. */
+  onReady?: () => void;
 }
 
 /**
@@ -48,6 +50,7 @@ export default function ProcessedImage({
   bypass = false,
   zoom = 1,
   className,
+  onReady,
 }: Props) {
   const { i18n } = useTranslation();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -59,6 +62,10 @@ export default function ProcessedImage({
   const bufDimsRef = useRef<{ w: number; h: number }>({ w: 0, h: 0 });
   const displayRef = useRef<{ w: number; h: number }>({ w: 0, h: 0 });
   const rafRef = useRef<number>(0);
+  const readyCallbackRafRef = useRef<number>(0);
+  const readyNotifiedRef = useRef(false);
+  const onReadyRef = useRef(onReady);
+  onReadyRef.current = onReady;
   const [status, setStatus] = useState<"loading" | "ready" | "failed">("loading");
   const [renderingFull, setRenderingFull] = useState(false);
   const [loadError, setLoadError] = useState("");
@@ -208,6 +215,15 @@ export default function ProcessedImage({
     }
   }, [applyLayout, computeBuf]);
 
+  const notifyPainted = useCallback(() => {
+    if (readyNotifiedRef.current) return;
+    readyNotifiedRef.current = true;
+    cancelAnimationFrame(readyCallbackRafRef.current);
+    // Wait one more frame so the freshly painted canvas is presented before
+    // a progressive parent fades out its thumbnail placeholder.
+    readyCallbackRafRef.current = requestAnimationFrame(() => onReadyRef.current?.());
+  }, []);
+
   /** Run the develop engine on the base buffer and paint the result. */
   const process = useCallback(() => {
     cancelAnimationFrame(rafRef.current);
@@ -219,6 +235,7 @@ export default function ProcessedImage({
       if (!ctx) return;
       if (bypassRef.current || isNeutral(settingsRef.current)) {
         ctx.putImageData(base, 0, 0);
+        notifyPainted();
         return;
       }
       const working = new ImageData(
@@ -228,8 +245,9 @@ export default function ProcessedImage({
       );
       processImageData(working, settingsRef.current);
       ctx.putImageData(working, 0, 0);
+      notifyPainted();
     });
-  }, []);
+  }, [notifyPainted]);
 
   /** Re-rasterize only if the target buffer size changed meaningfully. */
   const maybeRerasterize = useCallback(() => {
@@ -263,6 +281,8 @@ export default function ProcessedImage({
     let gotFull = false;
     if (!isUpgrade) {
       sourcePathRef.current = photo.filePath;
+      readyNotifiedRef.current = false;
+      cancelAnimationFrame(readyCallbackRafRef.current);
       imgRef.current = null;
       setStatus("loading");
       setRenderingFull(false);
@@ -333,6 +353,7 @@ export default function ProcessedImage({
 
     return () => {
       alive = false;
+      cancelAnimationFrame(readyCallbackRafRef.current);
     };
   }, [photo.filePath, photo.previewable, fullPreviewSize, rasterize, process]);
 

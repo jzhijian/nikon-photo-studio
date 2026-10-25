@@ -20,7 +20,15 @@ export const useToastStore = create<ToastState>((set) => ({
   toasts: [],
   push: (message, kind = "info") => {
     const id = nextId++;
-    set((s) => ({ toasts: [...s.toasts, { id, kind, message }] }));
+    let inserted = false;
+    set((s) => {
+      // Connection/network polling can report the same state more than once;
+      // keep one visible notification instead of stacking identical cards.
+      if (s.toasts.some((toast) => toast.message === message && toast.kind === kind)) return s;
+      inserted = true;
+      return { toasts: [...s.toasts, { id, kind, message }] };
+    });
+    if (!inserted) return;
     // auto-dismiss after 2.6s
     setTimeout(() => {
       set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) }));

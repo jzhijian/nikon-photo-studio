@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
+import { toast } from "./toastStore";
 
 export type PresetGroup = "all" | "cloud" | "imported" | "favorites";
 export type PresetFormat = "all" | "np3" | "ncp" | "xmp" | "cube" | "lrpreset" | "3dl" | "costyle";
@@ -170,7 +171,7 @@ export const usePresetStore = create<PresetState>((set, get) => ({
       let params: PresetParams = { ...DEFAULT_PRESET_PARAMS };
 
       try {
-        // Call Rust backend to parse the preset file (best-effort, rarely fails).
+        // Only count a file once the backend has accepted its format.
         const result = await invoke<{
           name: string;
           format: string;
@@ -207,9 +208,8 @@ export const usePresetStore = create<PresetState>((set, get) => ({
           sharpening: result.params.sharpening ?? 0,
         };
       } catch (err) {
-        // Safety net: still import the file using its filename + neutral params so a
-        // selected preset is never silently dropped from the import count.
-        console.error(`Preset parse fell back to defaults: ${filePath}`, err);
+        toast(`无法导入 ${filePath.split(/[\\/]/).pop()}：${String(err)}`, "error");
+        continue;
       }
 
       const newPreset: PresetInfo = {

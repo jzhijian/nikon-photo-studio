@@ -46,6 +46,9 @@ thumb_cache/
 
 # Environment and local secrets
 .env
+.research-cloud/
+cloud-downloads/
+release-assets/
 .env.*
 !.env.example
 

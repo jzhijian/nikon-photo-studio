@@ -1,5 +1,8 @@
 pub mod commands;
+pub mod cloud;
 pub mod parser;
+pub mod z30_control;
+pub mod nikon_file;
 
 use serde::{Deserialize, Serialize};
 

@@ -6,6 +6,7 @@ import { useTransferStore } from "../stores/transferStore";
 import { toast } from "../stores/toastStore";
 import { useTranslation } from "react-i18next";
 import { open } from "@tauri-apps/plugin-dialog";
+import { invoke } from "@tauri-apps/api/core";
 
 export default function LeftPanel() {
   const activeModule = useAppStore((s) => s.activeModule);
@@ -34,19 +35,22 @@ function PanelItem({
   active,
   onClick,
   title,
+  disabled,
 }: {
   label: string;
   badge?: string;
   active?: boolean;
   onClick?: () => void;
   title?: string;
+  disabled?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       title={title}
-      className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-[13px] cursor-pointer transition-all text-left active:scale-[0.98] ${
+      disabled={disabled}
+      className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-[13px] cursor-pointer transition-all text-left active:scale-[0.98] disabled:cursor-wait disabled:opacity-60 ${
         active
           ? "bg-nps-tertiary text-nps-accent font-medium"
           : "text-nps-text-dim hover:bg-nps-tertiary hover:text-nps-text"
@@ -496,9 +500,36 @@ function PresetsLeft() {
     </>
   );
 }
+let transferSwitchSequence = 0;
+
 function TransferLeft() {
   const { t } = useTranslation();
-  const { connectionType, quality, connected, cameraModel, connectionDetail, cameraPhotos, connectionError, setConnectionType, setQuality } = useTransferStore();
+  const { connectionType, connected, cameraModel, connectionDetail, cameraPhotos, connectionError, switchingConnection, setConnectionType, setSwitchingConnection, setQuality } = useTransferStore();
+
+  const switchConnection = async (next: "wifi-ap" | "wifi-sta" | "usb") => {
+    if (next === connectionType) return;
+    const sequence = ++transferSwitchSequence;
+    // Clear the old device grid immediately so a slow Windows/Wi-Fi teardown
+    // cannot leave the UI visually stuck on the previous transport.
+    setSwitchingConnection(true);
+    setConnectionType(next);
+    try {
+      // Disconnect is an interrupt, not another item behind the old connect
+      // queue. The backend invalidates the session generation and wakes any
+      // blocked PTP/IP read; a short UI deadline also prevents a Windows MTP
+      // teardown from disabling all transport choices indefinitely.
+      await Promise.race([
+        invoke("disconnect"),
+        new Promise<void>((resolve) => window.setTimeout(resolve, 1500)),
+      ]);
+    } catch {
+      // The backend disconnect is idempotent. A failed cleanup must not leave
+      // the transport picker disabled forever; the next connect starts with
+      // another serialized disconnect.
+    } finally {
+      if (sequence === transferSwitchSequence) setSwitchingConnection(false);
+    }
+  };
 
   return (
     <>
@@ -507,30 +538,25 @@ function TransferLeft() {
         <PanelItem
           label="📱 Wi‑Fi 直连（AP）"
           active={connectionType === "wifi-ap"}
-          onClick={() => {
-            setConnectionType("wifi-ap");
-            toast("直连模式：电脑连接相机创建的 Wi‑Fi");
-          }}
+          disabled={switchingConnection}
+          onClick={() => { void switchConnection("wifi-ap"); }}
         />
         <PanelItem
           label="🏠 Wi‑Fi 基础设施（STA）"
           active={connectionType === "wifi-sta"}
-          onClick={() => {
-            setConnectionType("wifi-sta");
-            toast("基础设施模式：相机与电脑连接同一路由器");
-          }}
+          disabled={switchingConnection}
+          onClick={() => { void switchConnection("wifi-sta"); }}
         />
         <PanelItem
           label="🔌 USB（MTP/PTP）"
           active={connectionType === "usb"}
-          onClick={() => {
-            setConnectionType("usb");
-            toast("USB (MTP/PTP)", "success");
-          }}
+          disabled={switchingConnection}
+          onClick={() => { void switchConnection("usb"); }}
         />
+        {switchingConnection && <div className="mt-2 px-1 text-[10px] text-nps-accent">正在释放上一个连接…</div>}
         <div className="mt-2 px-1 text-[10px] leading-relaxed text-nps-text-dim">
-          {connectionType === "wifi-ap" && "相机提供无线网络；Windows 显示“无 Internet”正常。"}
-          {connectionType === "wifi-sta" && "相机和电脑须在同一局域网，并使用相机的 IPv4 地址。"}
+          {connectionType === "wifi-ap" && "电脑连接 NIKON_… 相机热点；相机须停留在“连接到计算机”的等待连接画面。“无 Internet”正常。"}
+          {connectionType === "wifi-sta" && "相机和电脑连接同一路由器；先用 Wireless Transmitter Utility 配对，再填写相机 IPv4。"}
           {connectionType === "usb" && "相机菜单中的 USB 模式须设为 MTP/PTP。"}
         </div>
       </div>
@@ -561,17 +587,12 @@ function TransferLeft() {
 
       <div className="mb-4">
         <SectionTitle>{t("transfer.downloadSettings")}</SectionTitle>
-        {(["original", "8mp", "2mp"] as const).map((q) => (
-          <PanelItem
-            key={q}
-            label={q === "original" ? `📷 ${t("transfer.original")}` : q === "8mp" ? "🖼️ 8MP JPEG" : "🖼️ 2MP JPEG"}
-            active={quality === q}
-            onClick={() => {
-              setQuality(q);
-              toast(`${t("transfer.quality")}: ${q === "original" ? t("transfer.original") : q.toUpperCase()}`);
-            }}
-          />
-        ))}
+        <PanelItem
+          label={`📷 ${t("transfer.original")}（完整复制）`}
+          active
+          onClick={() => setQuality("original")}
+        />
+        <div className="mt-2 px-1 text-[10px] leading-relaxed text-nps-text-dim">下载会按相机中的原始文件名和完整字节复制，不转换、不压缩。</div>
       </div>
 
       <div>

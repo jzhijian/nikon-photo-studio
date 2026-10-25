@@ -1,5 +1,5 @@
-use serde::Serialize;
 use super::{ExifData, PhotoRecord};
+use serde::Serialize;
 
 #[derive(Debug, Serialize)]
 pub struct ScanResult {
@@ -26,7 +26,11 @@ pub struct ImportedPhoto {
 pub async fn scan_folder(path: String) -> Result<ScanResult, String> {
     let files = super::scan_directory(&path);
     let count = files.len();
-    Ok(ScanResult { folder: path, count, files })
+    Ok(ScanResult {
+        folder: path,
+        count,
+        files,
+    })
 }
 
 /// Recursively import every supported image under `path`.
@@ -67,7 +71,11 @@ fn collect_images(dir: &std::path::Path, out: &mut Vec<ImportedPhoto>) {
             (0, 0)
         };
         out.push(ImportedPhoto {
-            filename: p.file_name().and_then(|n| n.to_str()).unwrap_or("unknown").to_string(),
+            filename: p
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("unknown")
+                .to_string(),
             file_path: p.to_string_lossy().to_string(),
             format: ext.to_uppercase(),
             file_size: size,
@@ -80,7 +88,9 @@ fn collect_images(dir: &std::path::Path, out: &mut Vec<ImportedPhoto>) {
 
 /// Dimensions of an in-memory JPEG (used for NEF embedded previews).
 fn jpeg_dimensions(j: &[u8]) -> Option<(u32, u32)> {
-    image::load_from_memory(j).ok().map(|i| (i.width(), i.height()))
+    image::load_from_memory(j)
+        .ok()
+        .map(|i| (i.width(), i.height()))
 }
 
 /// Read EXIF orientation tag (0x0112) from JPEG data.
@@ -91,11 +101,16 @@ fn jpeg_exif_orientation(data: &[u8]) -> u8 {
     }
     let mut pos = 2usize;
     while pos + 4 < data.len() {
-        if data[pos] != 0xFF { pos += 1; continue; }
+        if data[pos] != 0xFF {
+            pos += 1;
+            continue;
+        }
         let marker = data[pos + 1];
         if marker == 0xE1 {
             // APP1
-            if pos + 4 >= data.len() { break; }
+            if pos + 4 >= data.len() {
+                break;
+            }
             let seg_len = u16::from_be_bytes([data[pos + 2], data[pos + 3]]) as usize;
             let seg_start = pos + 4;
             if seg_start + 6 <= data.len() && &data[seg_start..seg_start + 6] == b"Exif\0\0" {
@@ -110,7 +125,9 @@ fn jpeg_exif_orientation(data: &[u8]) -> u8 {
         } else if marker == 0xD8 || marker == 0xD9 || (marker >= 0xD0 && marker <= 0xD7) {
             pos += 2;
         } else {
-            if pos + 4 >= data.len() { break; }
+            if pos + 4 >= data.len() {
+                break;
+            }
             let seg_len = u16::from_be_bytes([data[pos + 2], data[pos + 3]]) as usize;
             pos += 2 + seg_len;
         }
@@ -120,28 +137,44 @@ fn jpeg_exif_orientation(data: &[u8]) -> u8 {
 
 /// Read orientation tag from TIFF-structured data (JPEG EXIF or NEF header).
 fn read_tiff_orientation(tiff: &[u8]) -> u8 {
-    if tiff.len() < 8 { return 1; }
+    if tiff.len() < 8 {
+        return 1;
+    }
     let le = match &tiff[0..2] {
         b"II" => true,
         b"MM" => false,
         _ => return 1,
     };
     let r16 = |off: usize| -> u16 {
-        if off + 2 > tiff.len() { return 0; }
-        if le { u16::from_le_bytes([tiff[off], tiff[off+1]]) }
-        else { u16::from_be_bytes([tiff[off], tiff[off+1]]) }
+        if off + 2 > tiff.len() {
+            return 0;
+        }
+        if le {
+            u16::from_le_bytes([tiff[off], tiff[off + 1]])
+        } else {
+            u16::from_be_bytes([tiff[off], tiff[off + 1]])
+        }
     };
     let r32 = |off: usize| -> u32 {
-        if off + 4 > tiff.len() { return 0; }
-        if le { u32::from_le_bytes([tiff[off], tiff[off+1], tiff[off+2], tiff[off+3]]) }
-        else { u32::from_be_bytes([tiff[off], tiff[off+1], tiff[off+2], tiff[off+3]]) }
+        if off + 4 > tiff.len() {
+            return 0;
+        }
+        if le {
+            u32::from_le_bytes([tiff[off], tiff[off + 1], tiff[off + 2], tiff[off + 3]])
+        } else {
+            u32::from_be_bytes([tiff[off], tiff[off + 1], tiff[off + 2], tiff[off + 3]])
+        }
     };
     let ifd_off = r32(4) as usize;
-    if ifd_off + 2 > tiff.len() { return 1; }
+    if ifd_off + 2 > tiff.len() {
+        return 1;
+    }
     let count = r16(ifd_off) as usize;
     for i in 0..count {
         let e = ifd_off + 2 + i * 12;
-        if e + 12 > tiff.len() { break; }
+        if e + 12 > tiff.len() {
+            break;
+        }
         if r16(e) == 0x0112 {
             let v = r16(e + 8);
             return if (1..=8).contains(&v) { v as u8 } else { 1 };
@@ -294,7 +327,12 @@ fn encode_jpeg(img: &image::DynamicImage, quality: u8) -> Result<Vec<u8>, String
     let rgb = img.to_rgb8();
     let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut cursor, quality);
     encoder
-        .write_image(rgb.as_raw(), rgb.width(), rgb.height(), image::ExtendedColorType::Rgb8)
+        .write_image(
+            rgb.as_raw(),
+            rgb.width(),
+            rgb.height(),
+            image::ExtendedColorType::Rgb8,
+        )
         .map_err(|e| format!("encode failed: {e}"))?;
     Ok(buf)
 }
@@ -340,7 +378,7 @@ fn render_raster_full_preview(path: &str, max: u32) -> Result<Vec<u8>, String> {
     render_resized(path, max, image::imageops::FilterType::Lanczos3, 98)
 }
 
-fn data_url(bytes: &[u8]) -> String {
+pub(crate) fn data_url(bytes: &[u8]) -> String {
     format!("data:image/jpeg;base64,{}", base64_encode::encode(bytes))
 }
 
@@ -375,7 +413,10 @@ fn read_nef_preview_partial(path: &str) -> Result<(Vec<u8>, u8), String> {
             }
         }
         // Fast path B: seek to the JPEG (beyond the head) and read just it.
-        if off.checked_add(len).map(|e| e <= file_size).unwrap_or(false)
+        if off
+            .checked_add(len)
+            .map(|e| e <= file_size)
+            .unwrap_or(false)
             && f.seek(SeekFrom::Start(off as u64)).is_ok()
         {
             let mut jpeg = vec![0u8; len];
@@ -434,7 +475,8 @@ pub fn load_oriented_image(path: &str) -> Result<image::DynamicImage, String> {
         .to_lowercase();
     if ext == "nef" {
         let (jpeg, orientation) = nef_preview_cached(path)?;
-        let decoded = image::load_from_memory(&jpeg).map_err(|e| format!("decode preview failed: {e}"))?;
+        let decoded =
+            image::load_from_memory(&jpeg).map_err(|e| format!("decode preview failed: {e}"))?;
         Ok(apply_orientation(decoded, orientation))
     } else {
         let bytes = std::fs::read(path).map_err(|e| format!("read failed: {e}"))?;
@@ -461,7 +503,13 @@ fn render_thumbnail_sync(path: &str, max: u32) -> Result<String, String> {
     } else {
         image::imageops::FilterType::Triangle
     };
-    let quality = if max >= 2000 { 96u8 } else if max >= 1000 { 94u8 } else { 90u8 };
+    let quality = if max >= 2000 {
+        96u8
+    } else if max >= 1000 {
+        94u8
+    } else {
+        90u8
+    };
 
     if let Some(entry) = thumb_cache::entry_path(path, max, "thumb") {
         if let Some(bytes) = thumb_cache::read(&entry) {
@@ -488,7 +536,13 @@ fn render_thumbnail_to_cache(path: &str, max: u32) -> Result<std::path::PathBuf,
     } else {
         image::imageops::FilterType::Triangle
     };
-    let quality = if max >= 2000 { 96u8 } else if max >= 1000 { 94u8 } else { 90u8 };
+    let quality = if max >= 2000 {
+        96u8
+    } else if max >= 1000 {
+        94u8
+    } else {
+        90u8
+    };
 
     let entry = thumb_cache::entry_path(path, max, "thumb")
         .ok_or_else(|| "no cache directory available".to_string())?;
@@ -597,9 +651,15 @@ fn develop_nef_full(path: &str) -> Result<image::DynamicImage, String> {
 /// never fall back to the small embedded JPEG unless the caller chooses to.
 pub(crate) fn load_export_image(path: &str) -> Result<image::DynamicImage, String> {
     let ext = std::path::Path::new(path)
-        .extension().and_then(|value| value.to_str()).unwrap_or("")
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or("")
         .to_ascii_lowercase();
-    if ext == "nef" || ext == "nrw" { develop_nef_full(path) } else { load_oriented_image(path) }
+    if ext == "nef" || ext == "nrw" {
+        develop_nef_full(path)
+    } else {
+        load_oriented_image(path)
+    }
 }
 
 fn render_nef_full_raw(path: &str, max: u32, quality: u8) -> Result<Vec<u8>, String> {
@@ -661,7 +721,9 @@ pub async fn make_full_preview(path: String, max_size: Option<u32>) -> Result<St
                 let buf = match render_nef_full_raw(&path, max, 96) {
                     Ok(b) => b,
                     Err(e) => {
-                        tracing::warn!("RAW develop failed for {path}, using embedded preview: {e}");
+                        tracing::warn!(
+                            "RAW develop failed for {path}, using embedded preview: {e}"
+                        );
                         render_resized(&path, max, image::imageops::FilterType::Lanczos3, 95)?
                     }
                 };
@@ -704,7 +766,7 @@ pub async fn make_full_preview(path: String, max_size: Option<u32>) -> Result<St
 /// is likewise fast. Cached on disk (kind "fastprev") so repeat views are
 /// near-instant. Returns an inline data URL: unlike grid thumbnails, this image
 /// is consumed by a canvas and therefore must be same-origin/readable.
-fn render_fast_preview(path: &str) -> Result<String, String> {
+pub(crate) fn render_fast_preview(path: &str) -> Result<String, String> {
     let ext = std::path::Path::new(path)
         .extension()
         .and_then(|e| e.to_str())
@@ -825,8 +887,16 @@ mod base64_encode {
             let n = (b0 << 16) | (b1 << 8) | b2;
             out.push(TABLE[(n >> 18) as usize & 63] as char);
             out.push(TABLE[(n >> 12) as usize & 63] as char);
-            out.push(if chunk.len() > 1 { TABLE[(n >> 6) as usize & 63] as char } else { '=' });
-            out.push(if chunk.len() > 2 { TABLE[n as usize & 63] as char } else { '=' });
+            out.push(if chunk.len() > 1 {
+                TABLE[(n >> 6) as usize & 63] as char
+            } else {
+                '='
+            });
+            out.push(if chunk.len() > 2 {
+                TABLE[n as usize & 63] as char
+            } else {
+                '='
+            });
         }
         out
     }
@@ -902,13 +972,20 @@ mod nef {
                 p += 12;
             }
             let next = self.u32(p).unwrap_or(0);
-            let next_abs = if next == 0 { None } else { Some(self.base + next as usize) };
+            let next_abs = if next == 0 {
+                None
+            } else {
+                Some(self.base + next as usize)
+            };
             Some((entries, next_abs))
         }
 
         /// Value of a LONG/SHORT count-1 entry as u32 (raw value field).
         fn get_val(&self, entries: &[Entry], tag: u16) -> Option<u32> {
-            entries.iter().find(|(t, _, _, _)| *t == tag).map(|(_, _, _, v)| *v)
+            entries
+                .iter()
+                .find(|(t, _, _, _)| *t == tag)
+                .map(|(_, _, _, v)| *v)
         }
     }
 
@@ -1011,7 +1088,12 @@ mod nef {
             let off = t.get_val(&entries, 0x0201)? as usize;
             let len = t.get_val(&entries, 0x0202)? as usize;
             let abs = t.base + off;
-            if len >= 4 && abs.checked_add(len).map(|e| e <= file_size).unwrap_or(false) {
+            if len >= 4
+                && abs
+                    .checked_add(len)
+                    .map(|e| e <= file_size)
+                    .unwrap_or(false)
+            {
                 Some((abs, len))
             } else {
                 None
@@ -1147,35 +1229,41 @@ mod nef_tests {
     use super::nef::{extract_preview, find_preview_location, is_jpeg};
     use super::read_nef_preview_partial;
 
-    fn le16(v: u16) -> [u8; 2] { v.to_le_bytes() }
-    fn le32(v: u32) -> [u8; 4] { v.to_le_bytes() }
+    fn le16(v: u16) -> [u8; 2] {
+        v.to_le_bytes()
+    }
+    fn le32(v: u32) -> [u8; 4] {
+        v.to_le_bytes()
+    }
 
     /// Build a minimal little-endian TIFF with an EXIF thumbnail (IFD1) JPEG.
     #[test]
     fn extracts_ifd1_thumbnail() {
         let mut d = Vec::new();
-        d.extend_from_slice(b"II");          // little-endian
-        d.extend_from_slice(&le16(42));      // magic
-        d.extend_from_slice(&le32(8));       // IFD0 @ 8
-        // IFD0 @8: 1 entry
+        d.extend_from_slice(b"II"); // little-endian
+        d.extend_from_slice(&le16(42)); // magic
+        d.extend_from_slice(&le32(8)); // IFD0 @ 8
+                                       // IFD0 @8: 1 entry
         d.extend_from_slice(&le16(1));
-        d.extend_from_slice(&le16(0x0100));  // ImageWidth
-        d.extend_from_slice(&le16(3));       // SHORT
+        d.extend_from_slice(&le16(0x0100)); // ImageWidth
+        d.extend_from_slice(&le16(3)); // SHORT
         d.extend_from_slice(&le32(1));
         d.extend_from_slice(&le32(100));
-        d.extend_from_slice(&le32(26));      // next IFD (IFD1) @26
-        // IFD1 @26: 2 entries
+        d.extend_from_slice(&le32(26)); // next IFD (IFD1) @26
+                                        // IFD1 @26: 2 entries
         d.extend_from_slice(&le16(2));
-        d.extend_from_slice(&le16(0x0201));  // JPEGInterchangeFormat
-        d.extend_from_slice(&le16(4));       // LONG
+        d.extend_from_slice(&le16(0x0201)); // JPEGInterchangeFormat
+        d.extend_from_slice(&le16(4)); // LONG
         d.extend_from_slice(&le32(1));
-        d.extend_from_slice(&le32(56));      // JPEG @56
-        d.extend_from_slice(&le16(0x0202));  // JPEGInterchangeFormatLength
+        d.extend_from_slice(&le32(56)); // JPEG @56
+        d.extend_from_slice(&le16(0x0202)); // JPEGInterchangeFormatLength
         d.extend_from_slice(&le16(4));
         d.extend_from_slice(&le32(1));
-        d.extend_from_slice(&le32(8));       // length 8
-        d.extend_from_slice(&le32(0));       // no next IFD
-        while d.len() < 56 { d.push(0); }
+        d.extend_from_slice(&le32(8)); // length 8
+        d.extend_from_slice(&le32(0)); // no next IFD
+        while d.len() < 56 {
+            d.push(0);
+        }
         d.extend_from_slice(&[0xFF, 0xD8, 0xFF, 0xE0, 0x11, 0x22, 0xFF, 0xD9]);
 
         let jpeg = extract_preview(&d).expect("should extract a preview");
@@ -1204,24 +1292,26 @@ mod nef_tests {
         let mut d = Vec::new();
         d.extend_from_slice(b"II");
         d.extend_from_slice(&le16(42));
-        d.extend_from_slice(&le32(8));       // IFD0 @ 8
-        d.extend_from_slice(&le16(1));       // 1 entry
-        d.extend_from_slice(&le16(0x0100));  // ImageWidth
+        d.extend_from_slice(&le32(8)); // IFD0 @ 8
+        d.extend_from_slice(&le16(1)); // 1 entry
+        d.extend_from_slice(&le16(0x0100)); // ImageWidth
         d.extend_from_slice(&le16(3));
         d.extend_from_slice(&le32(1));
         d.extend_from_slice(&le32(100));
-        d.extend_from_slice(&le32(26));      // next IFD (IFD1) @26
-        d.extend_from_slice(&le16(2));       // IFD1: 2 entries
+        d.extend_from_slice(&le32(26)); // next IFD (IFD1) @26
+        d.extend_from_slice(&le16(2)); // IFD1: 2 entries
         d.extend_from_slice(&le16(0x0201));
         d.extend_from_slice(&le16(4));
         d.extend_from_slice(&le32(1));
-        d.extend_from_slice(&le32(56));      // JPEG @56
+        d.extend_from_slice(&le32(56)); // JPEG @56
         d.extend_from_slice(&le16(0x0202));
         d.extend_from_slice(&le16(4));
         d.extend_from_slice(&le32(1));
-        d.extend_from_slice(&le32(8));       // length 8
-        d.extend_from_slice(&le32(0));       // no next IFD
-        while d.len() < 56 { d.push(0); }
+        d.extend_from_slice(&le32(8)); // length 8
+        d.extend_from_slice(&le32(0)); // no next IFD
+        while d.len() < 56 {
+            d.push(0);
+        }
         d.extend_from_slice(&[0xFF, 0xD8, 0xFF, 0xE0, 0x11, 0x22, 0xFF, 0xD9]);
         d
     }
@@ -1243,26 +1333,29 @@ mod nef_tests {
         let mut d = Vec::new();
         d.extend_from_slice(b"II");
         d.extend_from_slice(&le16(42));
-        d.extend_from_slice(&le32(8));       // IFD0 @ 8
+        d.extend_from_slice(&le32(8)); // IFD0 @ 8
         d.extend_from_slice(&le16(1));
         d.extend_from_slice(&le16(0x0100));
         d.extend_from_slice(&le16(3));
         d.extend_from_slice(&le32(1));
         d.extend_from_slice(&le32(100));
-        d.extend_from_slice(&le32(26));      // IFD1 @26
+        d.extend_from_slice(&le32(26)); // IFD1 @26
         d.extend_from_slice(&le16(2));
         d.extend_from_slice(&le16(0x0201));
         d.extend_from_slice(&le16(4));
         d.extend_from_slice(&le32(1));
-        d.extend_from_slice(&le32(5000));    // JPEG @5000 (outside buffer)
+        d.extend_from_slice(&le32(5000)); // JPEG @5000 (outside buffer)
         d.extend_from_slice(&le16(0x0202));
         d.extend_from_slice(&le16(4));
         d.extend_from_slice(&le32(1));
-        d.extend_from_slice(&le32(900));     // length 900
+        d.extend_from_slice(&le32(900)); // length 900
         d.extend_from_slice(&le32(0));
         assert_eq!(d.len(), 56);
 
-        assert!(extract_preview(&d).is_none(), "full extractor cannot see past buffer");
+        assert!(
+            extract_preview(&d).is_none(),
+            "full extractor cannot see past buffer"
+        );
         let loc = find_preview_location(&d, 6000).expect("partial locator must succeed");
         assert_eq!(loc, (5000, 900));
         // But if the claimed JPEG runs past the real file size, reject it.
@@ -1277,24 +1370,26 @@ mod nef_tests {
         let mut d = Vec::new();
         d.extend_from_slice(b"II");
         d.extend_from_slice(&le16(42));
-        d.extend_from_slice(&le32(8));       // IFD0 @ 8
+        d.extend_from_slice(&le32(8)); // IFD0 @ 8
         d.extend_from_slice(&le16(1));
-        d.extend_from_slice(&le16(0x0112));  // Orientation
+        d.extend_from_slice(&le16(0x0112)); // Orientation
         d.extend_from_slice(&le16(3));
         d.extend_from_slice(&le32(1));
-        d.extend_from_slice(&le32(6));       // orientation = 6
-        d.extend_from_slice(&le32(26));      // IFD1 @26
+        d.extend_from_slice(&le32(6)); // orientation = 6
+        d.extend_from_slice(&le32(26)); // IFD1 @26
         d.extend_from_slice(&le16(2));
         d.extend_from_slice(&le16(0x0201));
         d.extend_from_slice(&le16(4));
         d.extend_from_slice(&le32(1));
-        d.extend_from_slice(&le32(56));      // JPEG @56
+        d.extend_from_slice(&le32(56)); // JPEG @56
         d.extend_from_slice(&le16(0x0202));
         d.extend_from_slice(&le16(4));
         d.extend_from_slice(&le32(1));
-        d.extend_from_slice(&le32(8));       // length 8
+        d.extend_from_slice(&le32(8)); // length 8
         d.extend_from_slice(&le32(0));
-        while d.len() < 56 { d.push(0); }
+        while d.len() < 56 {
+            d.push(0);
+        }
         d.extend_from_slice(&[0xFF, 0xD8, 0xFF, 0xE0, 0x11, 0x22, 0xFF, 0xD9]);
 
         let dir = tempfile::tempdir().unwrap();
@@ -1324,14 +1419,24 @@ mod nef_tests {
 
         let (jpeg, orientation) = read_nef_preview_partial(&path).expect("partial read real NEF");
         assert!(is_jpeg(&jpeg), "partial reader returned non-JPEG bytes");
-        assert!(jpeg.len() > 10_000, "preview JPEG suspiciously small: {}", jpeg.len());
-        assert!((1..=8).contains(&orientation), "bad orientation {orientation}");
+        assert!(
+            jpeg.len() > 10_000,
+            "preview JPEG suspiciously small: {}",
+            jpeg.len()
+        );
+        assert!(
+            (1..=8).contains(&orientation),
+            "bad orientation {orientation}"
+        );
 
         // Must agree with the robust full-buffer extractor.
         let raw = std::fs::read(&path).unwrap();
         let full = extract_preview(&raw).expect("full extractor on real NEF");
         assert_eq!(jpeg.len(), full.len(), "partial and full reads must match");
-        assert_eq!(jpeg, full, "partial and full preview bytes must be identical");
+        assert_eq!(
+            jpeg, full,
+            "partial and full preview bytes must be identical"
+        );
 
         // Timing sanity (warmed by the reads above): partial should be quick.
         let t0 = std::time::Instant::now();
@@ -1506,12 +1611,18 @@ mod cache_tests {
             }
         }
         let img = image::ImageBuffer::<image::Luma<u8>, Vec<u8>>::from_raw(w, h, g).expect("buf");
-        image::DynamicImage::ImageLuma8(img).save(path).expect("save png");
+        image::DynamicImage::ImageLuma8(img)
+            .save(path)
+            .expect("save png");
     }
 
     #[test]
     fn test_encode_jpeg_produces_jpeg_bytes() {
-        let img = image::DynamicImage::ImageRgb8(image::RgbImage::from_pixel(16, 16, image::Rgb([200, 100, 50])));
+        let img = image::DynamicImage::ImageRgb8(image::RgbImage::from_pixel(
+            16,
+            16,
+            image::Rgb([200, 100, 50]),
+        ));
         let bytes = encode_jpeg(&img, 90).expect("encode");
         assert!(bytes.len() > 4, "jpeg should be non-trivial");
         assert_eq!(bytes[0], 0xFF, "JPEG SOI byte 0");
@@ -1523,11 +1634,20 @@ mod cache_tests {
         let dir = tempfile::tempdir().unwrap();
         let p = dir.path().join("big.png");
         write_test_png(&p, 200, 100);
-        let bytes = render_resized(p.to_str().unwrap(), 50, image::imageops::FilterType::Triangle, 90)
-            .expect("render");
+        let bytes = render_resized(
+            p.to_str().unwrap(),
+            50,
+            image::imageops::FilterType::Triangle,
+            90,
+        )
+        .expect("render");
         let decoded = image::load_from_memory(&bytes).expect("decode rendered jpeg");
-        assert!(decoded.width() <= 50 && decoded.height() <= 50,
-            "rendered {}x{} should fit within 50px", decoded.width(), decoded.height());
+        assert!(
+            decoded.width() <= 50 && decoded.height() <= 50,
+            "rendered {}x{} should fit within 50px",
+            decoded.width(),
+            decoded.height()
+        );
     }
 
     #[test]
@@ -1537,10 +1657,16 @@ mod cache_tests {
         let image = image::DynamicImage::ImageRgb8(image::RgbImage::from_fn(96, 64, |x, y| {
             image::Rgb([(x * 2) as u8, (y * 3) as u8, ((x + y) * 2) as u8])
         }));
-        image.save_with_format(&path, image::ImageFormat::Jpeg).expect("save jpeg");
+        image
+            .save_with_format(&path, image::ImageFormat::Jpeg)
+            .expect("save jpeg");
         let original = std::fs::read(&path).expect("read original");
-        let preview = render_raster_full_preview(path.to_str().unwrap(), 2048).expect("render full preview");
-        assert_eq!(preview, original, "native JPEG must not be decoded and re-encoded");
+        let preview =
+            render_raster_full_preview(path.to_str().unwrap(), 2048).expect("render full preview");
+        assert_eq!(
+            preview, original,
+            "native JPEG must not be decoded and re-encoded"
+        );
     }
 
     #[test]
@@ -1613,7 +1739,10 @@ mod cache_tests {
                 !e.url.is_empty() && std::path::Path::new(&e.url).exists(),
                 "entry {i} should be a rendered cache file path that exists"
             );
-            assert!(e.url.ends_with(".thumb"), "entry {i} should be a .thumb cache file");
+            assert!(
+                e.url.ends_with(".thumb"),
+                "entry {i} should be a .thumb cache file"
+            );
         }
     }
 
@@ -1634,7 +1763,10 @@ mod cache_tests {
             !out[0].url.is_empty() && std::path::Path::new(&out[0].url).exists(),
             "good file renders to an existing cache path"
         );
-        assert_eq!(out[1].url, "", "missing file yields empty url, not an abort");
+        assert_eq!(
+            out[1].url, "",
+            "missing file yields empty url, not an abort"
+        );
         assert_eq!(out[1].path, paths[1], "failed entry still reports its path");
     }
 
@@ -1695,7 +1827,10 @@ mod cache_tests {
         let img = image::load_from_memory(&bytes).expect("valid JPEG");
         eprintln!(
             "fast preview OK: {}x{} in {:.1} ms ({} KB)",
-            img.width(), img.height(), elapsed.as_secs_f64() * 1000.0, bytes.len() / 1024
+            img.width(),
+            img.height(),
+            elapsed.as_secs_f64() * 1000.0,
+            bytes.len() / 1024
         );
         // The embedded preview is small (~0.3 MP); a full demosaic would be
         // thousands of px across. Guard that we took the fast embedded path.
@@ -1703,7 +1838,8 @@ mod cache_tests {
         assert!(
             mp < 2_000_000.0,
             "fast preview should be the small embedded JPEG, got {}x{}",
-            img.width(), img.height()
+            img.width(),
+            img.height()
         );
     }
 }
@@ -1757,7 +1893,8 @@ mod rawler_orientation_tests {
             return;
         }
         let start = std::time::Instant::now();
-        let jpeg = super::render_nef_full_raw(&path, 4096, 92).expect("full RAW decode should succeed");
+        let jpeg =
+            super::render_nef_full_raw(&path, 4096, 92).expect("full RAW decode should succeed");
         let elapsed = start.elapsed();
         let img = image::load_from_memory(&jpeg).expect("produced bytes must be a valid JPEG");
         eprintln!(
@@ -1858,12 +1995,27 @@ mod bench_tests {
         let warm_ok = warm.iter().filter(|e| !e.url.is_empty()).count();
         let payload: usize = warm.iter().map(|e| e.url.len()).sum();
         eprintln!("=== BATCH THUMBNAIL BENCH ({n} NEFs, size {size}) ===");
-        eprintln!("COLD first-open (empty cache): {cold_dur:?}  ({:.1} ms/thumb)", ms(cold_dur) / n as f64);
-        eprintln!("WARM re-open    (cache hit)  : {warm_dur:?}  ({:.2} ms/thumb)", ms(warm_dur) / n as f64);
-        eprintln!("serial WARM     (1 thread)   : {serial_dur:?}  ({:.2} ms/thumb)", ms(serial_dur) / n as f64);
-        eprintln!("  -> parallel speedup vs serial: {:.2}x", ms(serial_dur) / ms(warm_dur).max(1e-9));
+        eprintln!(
+            "COLD first-open (empty cache): {cold_dur:?}  ({:.1} ms/thumb)",
+            ms(cold_dur) / n as f64
+        );
+        eprintln!(
+            "WARM re-open    (cache hit)  : {warm_dur:?}  ({:.2} ms/thumb)",
+            ms(warm_dur) / n as f64
+        );
+        eprintln!(
+            "serial WARM     (1 thread)   : {serial_dur:?}  ({:.2} ms/thumb)",
+            ms(serial_dur) / n as f64
+        );
+        eprintln!(
+            "  -> parallel speedup vs serial: {:.2}x",
+            ms(serial_dur) / ms(warm_dur).max(1e-9)
+        );
         eprintln!("rendered: cold={cold_ok} warm={warm_ok} serial={serial_ok}");
-        eprintln!("IPC payload (asset paths): {:.1} KB total, {:.0} B/thumb avg",
-            payload as f64 / 1024.0, payload as f64 / warm_ok.max(1) as f64);
+        eprintln!(
+            "IPC payload (asset paths): {:.1} KB total, {:.0} B/thumb avg",
+            payload as f64 / 1024.0,
+            payload as f64 / warm_ok.max(1) as f64
+        );
     }
 }
