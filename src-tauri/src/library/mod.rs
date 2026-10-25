@@ -1,5 +1,7 @@
 ﻿pub mod commands;
 
+pub mod nikon_sdk;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -46,6 +46,16 @@ not establish general Windows 10 support.
 
 ## CLI and integration contract
 
+The desktop preset page now exposes a local rendering panel. Select this prepared
+SDK Release directory, choose a NEF/NRW, and save to a new PNG. The Rust bridge
+requires the requested mode to match the helper report, checks the pixel dimensions,
+and embeds the SDK's sRGB ICC profile without changing RGB values. It writes via a
+temporary file and refuses to replace an existing destination. PNG output is 8-bit
+and does not copy camera EXIF. It does not automatically apply a selected cloud recipe.
+
+The same application command is available as:
+`nikon-photo-studio.exe --diagnostic nikon-render <SDK Release directory> <NEF> <new PNG> <as-shot|saved-edits>`.
+
 ```text
 nikon-image-probe.exe <SDK Release Bin directory> [NEF path] [new output.ppm]
 nikon-image-probe.exe <SDK Release Bin directory> <NEF path> <new output.ppm> --saved-edits
@@ -140,3 +150,16 @@ A real NEF with NX Studio embedded edits has not yet been rendered with this
 mode. NP3 import and comparison against an NX Studio reference export remain
 separate validation work. Neither the rejection tests nor a successful baseline
 render establish that a cloud recipe is reproduced faithfully.
+
+## Desktop bridge verification
+
+The production `render_nikon_raw` function rendered the same Z30 NEF to a new
+5568 × 3712 PNG. Independent Pillow decoding confirmed that every RGB byte matches
+the baseline PPM and that the embedded ICC bytes exactly match `NKsRGB.icm`.
+The original NEF was unchanged and a second request for the same destination was
+rejected without changing the PNG. Local evidence: `.research-cloud/app-render-verification.json`.
+PNG SHA-256: `a49412258c98e5faa3fbdeaad5c10c30b0573211459fa9077e560cce4bd506c9`.
+
+The opt-in Rust test uses `NPS_IMAGE_SDK_BIN`, `NPS_TEST_NEF`, and a new
+`NPS_TEST_OUTPUT` PNG path. Run `cargo test real_sdk_png_render_preserves_source -- --ignored --nocapture`
+from `src-tauri` after preparing the licensed SDK. Ordinary CI does not run this test.

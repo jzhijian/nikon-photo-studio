@@ -12,6 +12,14 @@ fn region(value: &str) -> Result<CloudRegion, String> {
 
 async fn execute(args: &[String]) -> Result<Value, String> {
     match args {
+        [operation, sdk, input, output, mode] if operation == "nikon-render" => {
+            let mode = match mode.as_str() {
+                "as-shot" => crate::library::nikon_sdk::RenderMode::AsShot,
+                "saved-edits" => crate::library::nikon_sdk::RenderMode::SavedEdits,
+                _ => return Err("显影模式须为 as-shot 或 saved-edits".into()),
+            };
+            serde_json::to_value(crate::library::nikon_sdk::render_nikon_raw(sdk.clone(), input.clone(), output.clone(), mode).await?).map_err(|e| e.to_string())
+        }
         [operation, site] if operation == "cloud-list" => cloud::list_cloud_recipes(region(site)?).await,
         [operation, site, id, path] if operation == "cloud-download" => {
             let path = cloud::download_cloud_recipe(id.clone(), path.clone(), region(site)?).await?;
@@ -22,7 +30,7 @@ async fn execute(args: &[String]) -> Result<Value, String> {
             let report = crate::presets::commands::inspect_nikon_file(path.clone()).await?;
             serde_json::to_value(report).map_err(|e| e.to_string())
         }
-        _ => Err("用法：--diagnostic cloud-list <china|international>；cloud-download <站点> <配方ID> <新JSON路径>；sdk-probe <SDK BinaryFile目录>；inspect-np3 <文件路径>".into()),
+        _ => Err("用法：--diagnostic cloud-list <china|international>；cloud-download <站点> <配方ID> <新JSON路径>；sdk-probe <SDK BinaryFile目录>；inspect-np3 <文件路径>；nikon-render <Image SDK Release目录> <NEF路径> <新PNG路径> <as-shot|saved-edits>".into()),
     }
 }
 

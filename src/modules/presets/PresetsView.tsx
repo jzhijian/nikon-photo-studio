@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { usePresetStore, PRESET_CATEGORIES, type PresetCategory, type PresetInfo } from "../../stores/presetStore";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import CloudRecipesPanel from "./CloudRecipesPanel";
+import NikonRenderPanel from "./NikonRenderPanel";
 import { toast } from "../../stores/toastStore";
 
 /** Preset Manager only: no photo strip, image preview, develop controls or export. */
@@ -70,6 +71,7 @@ export default function PresetsView() {
       </div>
 
       <CloudRecipesPanel />
+      <NikonRenderPanel />
       <div className="px-5 py-3 border-b border-nps-border bg-nps-secondary/40 shrink-0">
         <div className="flex gap-1.5 flex-wrap">
           {PRESET_CATEGORIES.map((item) => (

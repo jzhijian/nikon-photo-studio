@@ -162,6 +162,8 @@ int wmain(int argc, wchar_t** argv) {
                 CHECK(entry(kNkfl_Cmd_GetImageInfo, &image), "GetSavedEditImageInfo");
             }
             image.ulByteDepth = 1; image.ulColor = kNkfl_Color_RGB;
+            // Keep the SDK's AsShot/LastSaveSetting orientation without an extra transform.
+            image.ulOrientation = kNkfl_Orientation_CW0;
             CHECK(entry(kNkfl_Cmd_SetImageInfo, &image), "SetImageInfo");
             colorProfile.ulSize = sizeof(colorProfile); colorProfile.ulSessionID = session.ulSessionID;
             swprintf(dll, 32768, L"%ls\\NKsRGB.icm", profiles);

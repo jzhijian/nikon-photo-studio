@@ -278,6 +278,8 @@ JSON 是公开参数资料，**不是可导入相机的 NP3**。`gamma` 表示�
 
 本机 Windows 10 已通过 Image SDK 1.47 基础显影实测：真实 Z30 NEF 输出 5568 × 3712 的 sRGB 图像，中文路径复测输出一致，原片哈希不变。显影工具须与 SDK 的 DLL 和数据文件同目录。此结果验证原拍摄设置显影，尚未验证云创 NP3 的完整风格匹配；步骤及证据见 [tools/nikon-image/README.md](tools/nikon-image/README.md)。
 
+预设页的“官方显影 · 本机实验”可选择已经准备好的 Image SDK 运行目录与 NEF/NRW，输出新的 8 位 PNG，并嵌入 SDK 的 sRGB ICC 配置。原片及已有输出不覆盖，输出不复制拍摄 EXIF。原拍摄设置模式已通过真实 Z30 NEF 的应用后端集成测试；“NX 已保存编辑”模式要求编辑嵌入 NEF 副本，不能读取 `.nksc` 旁车文件，且仍待真实编辑照片的正向验证。选择网页配方不会自动作用于此显影入口。
+
 验证命令：`pnpm test`、`pnpm build`、在 `src-tauri` 下执行 `cargo test --bin nikon-photo-studio`。真实网络测试需要单独运行 `cargo test live_public_recipe_download -- --ignored --nocapture`，会访问两站并将元数据保存到临时目录。部分既有缓存测试需要正常的用户目录写权限；无需连接相机的测试不能证明硬件写入成功。
 
 详细记录见 [CHANGELOG.md](CHANGELOG.md)。更新内容按日期倒序维护，每次功能提交应补充当天的新增、修复、验证和已知限制。

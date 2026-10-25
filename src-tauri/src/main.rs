@@ -62,6 +62,7 @@ fn main() {
             camera::commands::get_wifi_network_info,
             // Library commands
             library::commands::scan_folder,
+            library::nikon_sdk::render_nikon_raw,
             library::commands::import_folder,
             library::commands::make_thumbnail,
             library::commands::make_full_preview,
