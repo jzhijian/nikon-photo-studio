@@ -2,9 +2,9 @@
 
 This Windows x64 helper calls a separately obtained Nikon NEF/NRW Image SDK. It
 initializes the official library, reads image metadata, and optionally develops a
-NEF using the original camera settings into a new sRGB PPM file. This is a baseline
-RAW renderer. It does **not** import NP3, apply a cloud recipe, modify a camera, or
-claim that a cloud style has been reproduced.
+NEF into a new sRGB PPM file using the original camera settings or applicable
+editing records already embedded in the input. It does **not** import NP3, apply a
+cloud recipe itself, modify a camera, or claim that a cloud style has been reproduced.
 
 No Nikon SDK source, header, profile, library, or example image is included here.
 Obtain the SDK under Nikon's license before using it. The local adapter includes
@@ -48,6 +48,7 @@ not establish general Windows 10 support.
 
 ```text
 nikon-image-probe.exe <SDK Release Bin directory> [NEF path] [new output.ppm]
+nikon-image-probe.exe <SDK Release Bin directory> <NEF path> <new output.ppm> --saved-edits
 ```
 
 - One argument: initialize and close the library.
@@ -55,6 +56,15 @@ nikon-image-probe.exe <SDK Release Bin directory> [NEF path] [new output.ppm]
 - Three arguments: develop with `RawParameterSet_AsShot`, high quality, 8-bit
   RGB, and the SDK's `NKsRGB.icm` for both output and output device profiles.
   Write a binary P6 PPM only after the SDK has closed successfully.
+- Add the trailing `--saved-edits` flag to a render request to read embedded
+  edits. The helper requires `GetEditState == ApplicableEdit` before selecting
+  `RawParameterSet_LastSaveSetting`. Missing, inapplicable, or unknown edit states
+  fail without rendering. The SDK does not read NX Studio `.nksc` sidecar files.
+  Save edits into a separate NEF/NRW copy with NX Studio before using this mode.
+- Saved-edit mode sets high quality before selecting `LastSaveSetting`, then
+  refreshes image information. It does not issue further development adjustments
+  after selecting saved edits. Any SDK warning, including `0x0102` (no edits) or
+  `0x0103` (inapplicable edits), fails instead of accepting an as-shot fallback.
 - Exit code `0`: the requested operation completed. Exit code `1`: failure;
   inspect `error`. Treat any other process termination as a failure as well.
 - Standard output contains one UTF-8 JSON object followed by a newline. A caller
@@ -74,7 +84,7 @@ nikon-image-probe.exe <SDK Release Bin directory> [NEF path] [new output.ppm]
 Success example:
 
 ```json
-{"schemaVersion":1,"sdkLoaded":true,"initialized":true,"inputOpened":true,"format":1048576,"width":5568,"height":3712,"byteDepth":1,"color":32,"orientation":1,"rendered":true,"outputPath":"D:\\example\\new-output.ppm","colorSpace":"sRGB","settings":"as-shot"}
+{"schemaVersion":1,"sdkLoaded":true,"initialized":true,"inputOpened":true,"format":1048576,"width":5568,"height":3712,"byteDepth":1,"color":32,"orientation":1,"rendered":true,"requestedSettings":"as-shot","outputPath":"D:\\example\\new-output.ppm","colorSpace":"sRGB","settings":"as-shot"}
 ```
 
 The four booleans `sdkLoaded`, `initialized`, `inputOpened`, and `rendered` are
@@ -84,6 +94,12 @@ untouched NEF query and 1 after the requested 8-bit rendering. `outputPath`,
 `colorSpace`, and `settings` appear only for a successful render. A failure adds
 the string `error` and always reports `rendered: false`; it does not claim partial
 success as a usable image. SDK warning responses are treated as failures.
+For accepted render arguments, `requestedSettings` records `as-shot` or
+`saved-edits`, including on a subsequent failure. `settings` uses the same values
+only after a successful render. `editState` appears if the saved-edit state query
+succeeded: `0` means absent, `1` applicable, and `2` inapplicable. Unknown values
+are rejected. A successful `saved-edits` render indicates that the SDK accepted
+the embedded edit record; it does not establish NP3 completeness or visual fidelity.
 
 ## Baseline verification, 2026-10-25
 
@@ -106,7 +122,21 @@ It was downloaded only into the ignored research directory.
 - Local evidence is saved in `.research-cloud/image-render-verification.json`,
   with `.research-cloud/z30-sdk-as-shot.ppm` and its reduced preview.
 
-No style-fidelity comparison has been made. Reading embedded NX Studio edits with
-`LastSaveSetting`, importing NP3, and matching a cloud recipe remain separate
-unimplemented work. Any future saved-edit mode must check that the edit state is
-applicable and reject fallback warnings instead of reporting an applied style.
+## Saved-edit rejection and baseline regression, 2026-10-25
+
+The same untouched Z30 sample returned `editState: 0` with `--saved-edits`.
+The helper exited with code 1, reported `rendered: false`, and created no output.
+Its input SHA-256 remained unchanged. The default as-shot render still produced
+exactly the baseline PPM SHA-256 above. Results are recorded locally in
+`.research-cloud/image-saved-edits-verification.json`.
+
+A separate synthetic SDK stub tested missing, inapplicable, and unknown edit
+states, an edit-state query warning, and post-selection warnings `0x0102`,
+`0x0103`, and `0x0101`. All seven cases failed without producing an output.
+The stub supplies no image pixels and is not an alternative rendering engine;
+its ignored local evidence is `.research-cloud/image-probe-tests/results.json`.
+
+A real NEF with NX Studio embedded edits has not yet been rendered with this
+mode. NP3 import and comparison against an NX Studio reference export remain
+separate validation work. Neither the rejection tests nor a successful baseline
+render establish that a cloud recipe is reproduced faithfully.

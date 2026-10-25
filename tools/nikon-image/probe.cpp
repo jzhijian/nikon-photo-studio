@@ -37,13 +37,15 @@ int wmain(int argc, wchar_t** argv) {
     Nkfl_EntryProcPtr entry = nullptr;
     DLL_DIRECTORY_COOKIE dllDirectory = nullptr;
     bool sdkLoaded = false, initialized = false, sessionOpened = false, oleInitialized = false, rendered = false;
+    bool savedEdits = false, renderRequested = false, editStateRead = false;
     unsigned long result = 0, closeResult = 0;
     NkflLibraryParam library{};
     NkflSessionParam session{};
     NkflImageInfoParam image{};
     NkflFileInfoParam file{};
     NkflDevelopColorMode mode{};
-    NkflRawDevelopment_RawParameterSet asShot{};
+    NkflRawDevelopment_RawParameterSet parameterSet{};
+    NkflEditState editState{};
     NkflRawDevelopment_RawQuality quality{};
     NkflRawDevelopmentParam development{};
     NkflOutputProfileParam colorProfile{};
@@ -62,7 +64,14 @@ int wmain(int argc, wchar_t** argv) {
 
 #define FAIL(...) do { snprintf(error, sizeof(error), __VA_ARGS__); exitCode = 1; goto cleanup; } while (0)
 #define CHECK(call, stage) do { result = (call); if (result != kNkfl_Code_None) FAIL("%s returned 0x%08lx", stage, result); } while (0)
-    if (argc < 2 || argc > 4) FAIL("Usage: nikon-image-probe.exe <SDK Release Bin directory> [NEF path] [new output.ppm]");
+    if (argc == 5 && !wcscmp(argv[4], L"--saved-edits")) savedEdits = true;
+    if (argc < 2 || argc > 5 || (argc == 5 && !savedEdits))
+        FAIL("Usage: nikon-image-probe.exe <SDK Release Bin directory> [NEF path] [new output.ppm [--saved-edits]]");
+    for (int i = 1; i < argc - (savedEdits ? 1 : 0); ++i) {
+        if (!wcscmp(argv[i], L"--saved-edits"))
+            FAIL("--saved-edits requires SDK directory, NEF input, and a new PPM output, followed by --saved-edits");
+    }
+    renderRequested = argc >= 4;
     // The official MFC sample initializes OLE before opening the Image SDK.
     if (FAILED(OleInitialize(nullptr))) FAIL("OLE initialization failed");
     oleInitialized = true;
@@ -73,7 +82,7 @@ int wmain(int argc, wchar_t** argv) {
         if (!absolute(argv[2], input) || !regularFile(input)) FAIL("Input image does not exist");
         if (!utf8(input, inputUtf8, sizeof(inputUtf8))) FAIL("Input path cannot be represented as UTF-8");
     }
-    if (argc == 4) {
+    if (renderRequested) {
         if (!absolute(argv[3], outputPath) || !utf8(outputPath, outputUtf8, sizeof(outputUtf8))) FAIL("Invalid output path");
         if (GetFileAttributesW(outputPath) != INVALID_FILE_ATTRIBUTES) FAIL("Output path already exists; choose a new file");
         const wchar_t* suffix = wcsrchr(outputPath, L'.');
@@ -127,14 +136,31 @@ int wmain(int argc, wchar_t** argv) {
         CHECK(entry(kNkfl_Cmd_GetFileInfo, &file), "GetFileInfo");
         image.ulSize = sizeof(image); image.ulSessionID = session.ulSessionID;
         CHECK(entry(kNkfl_Cmd_GetImageInfo, &image), "GetImageInfo");
-        if (argc == 4) {
-            asShot.ulSize = sizeof(asShot); asShot.ulParamterSet = kNkfl_RawParameterSet_AsShot;
+        if (renderRequested) {
             development.ulSize = sizeof(development); development.ulSessionID = session.ulSessionID;
-            development.ulRawDevelopment = kNkfl_RawDevelopment_RawParameterSet; development.pData = &asShot;
-            CHECK(entry(kNkfl_Cmd_RawDevelopment, &development), "SetAsShotDevelopment");
+            parameterSet.ulSize = sizeof(parameterSet);
+            if (savedEdits) {
+                editState.ulSize = sizeof(editState); editState.ulSessionID = session.ulSessionID;
+                CHECK(entry(kNkfl_Cmd_GetEditState, &editState), "GetEditState");
+                editStateRead = true;
+                if (editState.ulEditState != kNkfl_EditState_ApplicableEdit)
+                    FAIL("Saved edits are not applicable (editState=%lu); save edits embedded in a NEF/NRW copy using NX Studio. Sidecar files are not supported; refusing as-shot fallback", editState.ulEditState);
+            } else {
+                parameterSet.ulParamterSet = kNkfl_RawParameterSet_AsShot;
+                development.ulRawDevelopment = kNkfl_RawDevelopment_RawParameterSet; development.pData = &parameterSet;
+                CHECK(entry(kNkfl_Cmd_RawDevelopment, &development), "SetAsShotDevelopment");
+            }
             quality.ulSize = sizeof(quality); quality.ulQuality = kNkfl_RawQuality_High;
             development.ulRawDevelopment = kNkfl_RawDevelopment_RawQuality; development.pData = &quality;
             CHECK(entry(kNkfl_Cmd_RawDevelopment, &development), "SetHighQualityDevelopment");
+            if (savedEdits) {
+                // LastSaveSetting locks subsequent RawDevelopment adjustments.
+                // Every warning, including missing/inapplicable edits, is a failure.
+                parameterSet.ulParamterSet = kNkfl_RawParameterSet_LastSaveSetting;
+                development.ulRawDevelopment = kNkfl_RawDevelopment_RawParameterSet; development.pData = &parameterSet;
+                CHECK(entry(kNkfl_Cmd_RawDevelopment, &development), "SetSavedEditsDevelopment (as-shot fallback is not allowed)");
+                CHECK(entry(kNkfl_Cmd_GetImageInfo, &image), "GetSavedEditImageInfo");
+            }
             image.ulByteDepth = 1; image.ulColor = kNkfl_Color_RGB;
             CHECK(entry(kNkfl_Cmd_SetImageInfo, &image), "SetImageInfo");
             colorProfile.ulSize = sizeof(colorProfile); colorProfile.ulSessionID = session.ulSessionID;
@@ -192,7 +218,9 @@ cleanup:
     else if (sessionOpened) printf(",\"format\":%lu,\"width\":%lu,\"height\":%lu,\"byteDepth\":%lu,\"color\":%lu,\"orientation\":%lu",
         file.ulFormat, image.ulWidth, image.ulHeight, image.ulByteDepth, image.ulColor, image.ulOrientation);
     printf(",\"rendered\":%s", rendered && !exitCode ? "true" : "false");
-    if (rendered && !exitCode) { printf(",\"outputPath\":"); printString(outputUtf8); printf(",\"colorSpace\":\"sRGB\",\"settings\":\"as-shot\""); }
+    if (renderRequested) printf(",\"requestedSettings\":\"%s\"", savedEdits ? "saved-edits" : "as-shot");
+    if (editStateRead) printf(",\"editState\":%lu", editState.ulEditState);
+    if (rendered && !exitCode) { printf(",\"outputPath\":"); printString(outputUtf8); printf(",\"colorSpace\":\"sRGB\",\"settings\":\"%s\"", savedEdits ? "saved-edits" : "as-shot"); }
     puts("}");
     return exitCode;
 }

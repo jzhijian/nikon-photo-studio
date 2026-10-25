@@ -49,7 +49,7 @@ jobs:
           workspaces: src-tauri -> target
           key: windows-msvc-${{ hashFiles('src-tauri/Cargo.lock') }}
           cache-bin: false
-          cache-on-failure: false
+          cache-on-failure: true
           # Only Cargo dependencies/target output; no SDK/research directories.
       - name: Validate version and packaging boundaries
         run: |
@@ -62,6 +62,10 @@ jobs:
       - name: Test frontend
         run: |
           pnpm test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build frontend assets required by Tauri tests
+        run: |
+          pnpm build
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Test Rust with Windows MSVC
         run: |
