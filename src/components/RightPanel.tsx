@@ -589,6 +589,7 @@ function OrganizeRight() {
 
 /** Management-only right panel for the Presets module. */
 function PresetManagerRight() {
+  const { t } = useTranslation();
   const presets = usePresetStore((s) => s.presets);
   const selectedId = usePresetStore((s) => s.selectedId);
   const preset = presets.find((item) => item.id === selectedId) ?? null;
@@ -600,8 +601,8 @@ function PresetManagerRight() {
     <SectionTitle>预设详情</SectionTitle>
     <div className="h-16 rounded-lg mb-3" style={{ background: `linear-gradient(135deg, ${preset.color}, ${preset.color}88)` }} />
     <div className="text-[13px] font-semibold mb-3">{preset.name}</div>
-    <ExifRow label="格式" value={preset.format.toUpperCase()} />
-    <ExifRow label="来源" value={preset.group === "cloud" ? "内置" : "已导入"} />
+    <ExifRow label="格式" value={preset.format === "app" ? t("presets.appFormat") : preset.format.toUpperCase()} />
+    <ExifRow label="来源" value={preset.group === "builtin" ? "内置" : "已导入"} />
     <ExifRow label="分类" value={preset.category === "all" ? "未分类" : preset.category} />
     <ExifRow label="收藏" value={preset.favorite ? "是" : "否"} />
     {preset.sourcePath && <div className="mt-3 text-[9px] text-nps-text-dim break-all">{preset.sourcePath}</div>}

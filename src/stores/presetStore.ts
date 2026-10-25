@@ -3,8 +3,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { toast } from "./toastStore";
 
-export type PresetGroup = "all" | "cloud" | "imported" | "favorites";
-export type PresetFormat = "all" | "np3" | "ncp" | "xmp" | "cube" | "lrpreset" | "3dl" | "costyle";
+export type PresetGroup = "all" | "builtin" | "imported" | "favorites";
+export type PresetFormat = "all" | "app" | "np3" | "ncp" | "xmp" | "cube" | "lrpreset" | "3dl" | "costyle";
 export type PresetCategory = "all" | "portrait" | "landscape" | "film" | "mono" | "vintage" | "creative";
 
 /** Develop parameters that a preset carries */
@@ -62,18 +62,18 @@ const PRESET_COLORS = [
 let nextId = 100;
 
 const BUILTIN_PRESETS: PresetInfo[] = [
-  { id: 1, name: "Warm Glow", format: "xmp", group: "cloud", category: "portrait", color: "#e8a87c", favorite: true, params: { ...DEFAULT_PRESET_PARAMS, temperature: 6200, exposure: 0.3, saturation: 10 } },
-  { id: 2, name: "Ocean Mist", format: "cube", group: "cloud", category: "landscape", color: "#85cdca", favorite: false, params: { ...DEFAULT_PRESET_PARAMS, temperature: 4800, contrast: 15, dehaze: 20 } },
-  { id: 3, name: "Rose Dream", format: "np3", group: "cloud", category: "portrait", color: "#d9a7c7", favorite: false, params: { ...DEFAULT_PRESET_PARAMS, temperature: 5800, highlights: -20, saturation: 15, clarity: -10 } },
-  { id: 4, name: "Lavender", format: "xmp", group: "cloud", category: "creative", color: "#c7b8ea", favorite: true, params: { ...DEFAULT_PRESET_PARAMS, tint: 15, vibrance: 20, highlights: -10 } },
-  { id: 5, name: "Nikon Vivid", format: "np3", group: "imported", category: "landscape", color: "#f6c6ea", favorite: false, params: { ...DEFAULT_PRESET_PARAMS, contrast: 25, saturation: 30, sharpening: 20 } },
-  { id: 6, name: "Nikon Neutral", format: "ncp", group: "imported", category: "portrait", color: "#a8d8ea", favorite: false, params: { ...DEFAULT_PRESET_PARAMS, contrast: -5, saturation: -5, sharpening: 10 } },
-  { id: 7, name: "Portrait Soft", format: "lrpreset", group: "imported", category: "portrait", color: "#fcbad3", favorite: false, params: { ...DEFAULT_PRESET_PARAMS, exposure: 0.2, highlights: -30, clarity: -15, temperature: 5800 } },
-  { id: 8, name: "Landscape Deep", format: "lrpreset", group: "imported", category: "landscape", color: "#ffffd2", favorite: false, params: { ...DEFAULT_PRESET_PARAMS, contrast: 20, shadows: 25, vibrance: 25, dehaze: 15 } },
-  { id: 9, name: "Mono Contrast", format: "xmp", group: "imported", category: "mono", color: "#a8e6cf", favorite: false, params: { ...DEFAULT_PRESET_PARAMS, saturation: -100, contrast: 40, clarity: 20 } },
-  { id: 10, name: "Sunset Gold", format: "cube", group: "cloud", category: "vintage", color: "#ffd3b6", favorite: false, params: { ...DEFAULT_PRESET_PARAMS, temperature: 7000, exposure: 0.1, vibrance: 15, highlights: -15 } },
-  { id: 11, name: "Cherry Pop", format: "np3", group: "imported", category: "creative", color: "#ffaaa5", favorite: false, params: { ...DEFAULT_PRESET_PARAMS, tint: 20, saturation: 25, contrast: 10 } },
-  { id: 12, name: "Cinema Teal", format: "cube", group: "cloud", category: "film", color: "#ff8b94", favorite: false, params: { ...DEFAULT_PRESET_PARAMS, temperature: 4500, tint: -10, contrast: 20, shadows: -15, highlights: -20 } },
+  { id: 1, name: "Warm Glow", format: "app", group: "builtin", category: "portrait", color: "#e8a87c", favorite: true, params: { ...DEFAULT_PRESET_PARAMS, temperature: 6200, exposure: 0.3, saturation: 10 } },
+  { id: 2, name: "Ocean Mist", format: "app", group: "builtin", category: "landscape", color: "#85cdca", favorite: false, params: { ...DEFAULT_PRESET_PARAMS, temperature: 4800, contrast: 15, dehaze: 20 } },
+  { id: 3, name: "Rose Dream", format: "app", group: "builtin", category: "portrait", color: "#d9a7c7", favorite: false, params: { ...DEFAULT_PRESET_PARAMS, temperature: 5800, highlights: -20, saturation: 15, clarity: -10 } },
+  { id: 4, name: "Lavender", format: "app", group: "builtin", category: "creative", color: "#c7b8ea", favorite: true, params: { ...DEFAULT_PRESET_PARAMS, tint: 15, vibrance: 20, highlights: -10 } },
+  { id: 5, name: "Vivid", format: "app", group: "builtin", category: "landscape", color: "#f6c6ea", favorite: false, params: { ...DEFAULT_PRESET_PARAMS, contrast: 25, saturation: 30, sharpening: 20 } },
+  { id: 6, name: "Neutral", format: "app", group: "builtin", category: "portrait", color: "#a8d8ea", favorite: false, params: { ...DEFAULT_PRESET_PARAMS, contrast: -5, saturation: -5, sharpening: 10 } },
+  { id: 7, name: "Portrait Soft", format: "app", group: "builtin", category: "portrait", color: "#fcbad3", favorite: false, params: { ...DEFAULT_PRESET_PARAMS, exposure: 0.2, highlights: -30, clarity: -15, temperature: 5800 } },
+  { id: 8, name: "Landscape Deep", format: "app", group: "builtin", category: "landscape", color: "#ffffd2", favorite: false, params: { ...DEFAULT_PRESET_PARAMS, contrast: 20, shadows: 25, vibrance: 25, dehaze: 15 } },
+  { id: 9, name: "Mono Contrast", format: "app", group: "builtin", category: "mono", color: "#a8e6cf", favorite: false, params: { ...DEFAULT_PRESET_PARAMS, saturation: -100, contrast: 40, clarity: 20 } },
+  { id: 10, name: "Sunset Gold", format: "app", group: "builtin", category: "vintage", color: "#ffd3b6", favorite: false, params: { ...DEFAULT_PRESET_PARAMS, temperature: 7000, exposure: 0.1, vibrance: 15, highlights: -15 } },
+  { id: 11, name: "Cherry Pop", format: "app", group: "builtin", category: "creative", color: "#ffaaa5", favorite: false, params: { ...DEFAULT_PRESET_PARAMS, tint: 20, saturation: 25, contrast: 10 } },
+  { id: 12, name: "Cinema Teal", format: "app", group: "builtin", category: "film", color: "#ff8b94", favorite: false, params: { ...DEFAULT_PRESET_PARAMS, temperature: 4500, tint: -10, contrast: 20, shadows: -15, highlights: -20 } },
 ];
 
 interface PresetState {
@@ -148,7 +148,7 @@ export const usePresetStore = create<PresetState>((set, get) => ({
     const picked = await open({
       multiple: true,
       filters: [
-        { name: "Preset Files", extensions: ["xmp", "cube", "np3", "ncp", "lrpreset", "3dl", "costyle"] },
+        { name: "Preset Files", extensions: ["xmp", "cube", "lrpreset", "3dl", "costyle"] },
         { name: "All Files", extensions: ["*"] },
       ],
     });

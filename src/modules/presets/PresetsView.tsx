@@ -7,7 +7,7 @@ import { toast } from "../../stores/toastStore";
 
 /** Preset Manager only: no photo strip, image preview, develop controls or export. */
 export default function PresetsView() {
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const presets = usePresetStore((s) => s.presets);
   const group = usePresetStore((s) => s.group);
   const format = usePresetStore((s) => s.format);
@@ -95,7 +95,7 @@ export default function PresetsView() {
                   <input ref={renameRef} value={renameText} onChange={(event) => setRenameText(event.target.value)} onBlur={commitRename} onKeyDown={(event) => { if (event.key === "Enter") commitRename(); if (event.key === "Escape") startRename(null); }} onClick={(event) => event.stopPropagation()} className="w-full px-1.5 py-1 rounded bg-nps-tertiary border border-nps-accent text-[12px] outline-none" />
                 ) : <div className="text-[12px] font-medium truncate">{preset.name}</div>}
                 <div className="flex items-center gap-1.5 mt-1 text-[9px] text-nps-text-dim uppercase">
-                  <span>{preset.format}</span><span>·</span><span>{preset.group === "cloud" ? "内置" : "已导入"}</span>
+                  <span>{preset.format === "app" ? t("presets.appFormat") : preset.format}</span><span>·</span><span>{preset.group === "builtin" ? "内置" : "已导入"}</span>
                 </div>
                 <div className="mt-2 flex items-center gap-1">
                   <button type="button" onClick={(event) => { event.stopPropagation(); setCategoryTarget(categoryTarget === preset.id ? null : preset.id); }} className="px-1.5 py-0.5 rounded bg-nps-tertiary text-[9px] text-nps-text-dim hover:text-nps-text">分类</button>

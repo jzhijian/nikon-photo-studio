@@ -414,7 +414,7 @@ function PresetsLeft() {
   const setCategory = usePresetStore((s) => s.setCategory);
   const importPresetFiles = usePresetStore((s) => s.importPresetFiles);
 
-  const cloudCount = presets.filter((p) => p.group === "cloud").length;
+  const builtinCount = presets.filter((p) => p.group === "builtin").length;
   const importedCount = presets.filter((p) => p.group === "imported").length;
   const favCount = presets.filter((p) => p.favorite).length;
 
@@ -437,10 +437,10 @@ function PresetsLeft() {
           onClick={() => setGroup("all")}
         />
         <PanelItem
-          label={`☁️ ${t("presets.nikonCloud")}`}
-          badge={String(cloudCount)}
-          active={group === "cloud"}
-          onClick={() => setGroup("cloud")}
+          label={`🎛️ ${t("presets.builtin")}`}
+          badge={String(builtinCount)}
+          active={group === "builtin"}
+          onClick={() => setGroup("builtin")}
         />
         <PanelItem
           label={`📥 ${t("presets.imported")}`}
@@ -476,10 +476,10 @@ function PresetsLeft() {
 
       <div className="mb-4">
         <SectionTitle>{t("presets.formatFilter")}</SectionTitle>
-        {(["np3", "ncp", "xmp", "cube", "lrpreset", "3dl", "costyle"] as const).map((f) => (
+        {(["app", "np3", "ncp", "xmp", "cube", "lrpreset", "3dl", "costyle"] as const).map((f) => (
           <PanelItem
             key={f}
-            label={f === "np3" ? "NP3" : f === "ncp" ? "NCP" : f === "3dl" ? ".3dl LUT" : f === "costyle" ? "Capture One" : `.${f}`}
+            label={f === "app" ? t("presets.appFormat") : f === "np3" ? "NP3" : f === "ncp" ? "NCP" : f === "3dl" ? ".3dl LUT" : f === "costyle" ? "Capture One" : `.${f}`}
             badge={String(formatCounts(f))}
             active={format === f}
             onClick={() => setFormat(format === f ? "all" : f)}
@@ -495,7 +495,7 @@ function PresetsLeft() {
         ➕ {t("presets.importPreset")}
       </button>
       <div className="mt-2 text-[9px] text-nps-text-dim px-1 leading-relaxed">
-        支持格式: XMP, .cube, NP3, NCP, .lrpreset, .3dl, .costyle
+        {t("presets.formats")}
       </div>
     </>
   );
